@@ -65,7 +65,8 @@ hfkreads -s SE.fq.gz -m 1 -o test4
 To filter out low-quality reads only, the default '-m 2' parameter should change to '-m 1'.
 
 ### 3.4 Other options
-The '-A' parameter outputs quality values in fastq format, while the default is to output files in fasta format.\n
+The '-A' parameter outputs quality values in fastq format, while the default is to output files in fasta format.  
+
 The '-c' parameter compresses the output file, and by default, the output file is uncompressed.
 
 ## 4. License
