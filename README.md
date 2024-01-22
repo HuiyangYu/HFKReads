@@ -48,7 +48,7 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutFrefix
 ```
 hfkreads -1 PE_1.fq.gz -2 PE_2.fq.gz -o test1
 ```
-The output files consist of four files: <br>test1_pe_1.fa <br>test1_pe_2.fa <br>test1_se_1.fa <br>test1_se_2.fa. The reads with the 'se' label are unpaired high-frequency k-mer reads.
+The output files consist of four files: <br>test1_pe_1.fa <br>test1_pe_2.fa <br>test1_se_1.fa <br>test1_se_2.fa. <br>The reads with the 'se' label are unpaired high-frequency k-mer reads.
 
 ### 3.2 Extracting high-frequency k-mer reads from single-end sequencing reads
 ```
