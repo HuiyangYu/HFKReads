@@ -79,8 +79,9 @@ int  print_usage_FqSplit()
 		"   -c           compress the outPut File\n"
 		"   -f           outPut the KmerFre File\n"
 		"   -A           keep output quality info\n"
+		"   -v           PE use SE read to remove PCR\n"
 		"   -t           thread to run [4]\n"
-		"   -h           show help [v2.01]\n"
+		"   -h           show help [v2.02]\n"
 		"\n";
 	return 1;
 }
@@ -142,11 +143,11 @@ int parse_cmd_FqSplit(int argc, char **argv , Para_A24 * P2In  )
 		{
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
-			P2In->HarfReadLength=atoi(argv[i]);
-			if  ( (P2In->HarfReadLength)<11 )
+			P2In->HalfReadLength=atoi(argv[i]);
+			if  ( (P2In->HalfReadLength)<11 )
 			{
-				P2In->HarfReadLength=11;
-				cerr<<"Warings: -l should >=11 , we set it to 11\n";
+				P2In->HalfReadLength=11;
+				cerr<<"Warings: -l should >= 11, we set it to 11\n";
 			}
 		}
 		else if (flag  ==  "r")
@@ -207,6 +208,10 @@ int parse_cmd_FqSplit(int argc, char **argv , Para_A24 * P2In  )
 			P2In->OutFa=false;
 		}
 		//other options
+		else if (flag  == "v")
+		{
+			P2In->PCRA=true;
+		}
 		else if (flag  == "c")
 		{
 			P2In->OUTGZ=true;
@@ -276,7 +281,6 @@ int parse_cmd_FqSplit(int argc, char **argv , Para_A24 * P2In  )
 
 //bool NArry[256]={false}; 
 //bool LowArry[256]={true};
-//std::mutex mtx;
 //unordered_map <string, bool > PcrReCord ;
 
 
@@ -301,8 +305,17 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	vector <string>  BBBIII ;
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if (BATCH_SIZE > (P2In->ReadNumber)) 
+	{
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+		}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -318,10 +331,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
 
-
 	bool  *PASS =new bool [BATCH_SIZE];
-
-
 
 	igzstream INA ((P2In->InFq1).c_str(),ifstream::in);
 	igzstream INB ((P2In->InFq2).c_str(),ifstream::in);
@@ -362,7 +372,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			getline(INB,temp_2);
 			getline(INB,Quly_2);
 
-			if (ID_1.empty())   {continue ; }
+			if (ID_1.empty()) {continue ; }
 			AAASSS[CountFQ]=seq_1;
 			AAAQQQ[CountFQ]=Quly_1;
 			AAAIII[CountFQ]=ID_1;
@@ -387,7 +397,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				}
 
 				threads.clear();
-
+				RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 
 				for (int j = 0; j < CountFQ; j++)
@@ -420,6 +430,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				thread.join();
 			}
 			threads.clear();
+			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -475,7 +486,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				}
 
 				threads.clear();
-
+				RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 
 				for (int j = 0; j < CountFQ; j++)
@@ -506,6 +517,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				thread.join();
 			}
 			threads.clear();
+			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -552,8 +564,16 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
 
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
@@ -623,6 +643,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				}
 
 				threads.clear();
+				RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 
 
@@ -653,6 +674,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -700,6 +722,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				}
 
 				threads.clear();
+				RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 
 
@@ -729,6 +752,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -770,21 +794,26 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	vector <string>  BBBIII ;
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
 	BBBSSS.resize(BATCH_SIZE+2);
 	BBBIII.resize(BATCH_SIZE+2);
 
-
 	std::vector<std::thread> threads;
 
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
-
-
 	bool  *PASS =new bool [BATCH_SIZE];
 
 
@@ -793,6 +822,16 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 
 	gzFile fpBB;
 	kseq_t *seqBB;
+
+
+	fpAA = gzopen((P2In->InFq1).c_str(), "r");
+	seqAA = kseq_init(fpAA);
+
+	fpBB = gzopen((P2In->InFq2).c_str(), "r");
+	seqBB = kseq_init(fpBB);
+
+
+
 
 	int AA ; int A=0;
 	string ID_1,ID_2;
@@ -813,16 +852,14 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
 	int CountFQ=0;
 
-
 	for (A=0 ; A<(P2In->ReadNumber) && ( (AA = kseq_read(seqAA)) >= 0)  ; A++)
 	{
-
 		ID_1=(seqAA->name.s);
 		seqStrAA=(seqAA->seq.s);
 
+
 		AAASSS[CountFQ]=seqStrAA;
 		AAAIII[CountFQ]=ID_1;
-
 		AA = kseq_read(seqBB);
 
 		ID_2=(seqBB->name.s);
@@ -830,7 +867,6 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 		BBBSSS[CountFQ]=seqStrBB;
 		BBBIII[CountFQ]=ID_2;
 		CountFQ++;
-
 
 		if (CountFQ==BATCH_SIZE)
 		{
@@ -847,6 +883,7 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			}
 
 			threads.clear();
+			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 
 			for (int j = 0; j < CountFQ; j++)
@@ -863,7 +900,6 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 		}
 	}
 
-
 	if (CountFQ!=0)
 	{
 		for (int i = 0; i < n_thread; i++)
@@ -879,6 +915,7 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			thread.join();
 		}
 		threads.clear();
+		RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
 
 		for (int j = 0; j < CountFQ; j++)
 		{
@@ -945,8 +982,17 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if (BATCH_SIZE > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -962,6 +1008,9 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 
 	gzFile fpAA;
 	kseq_t *seqAA;
+
+	fpAA = gzopen((P2In->InFq1).c_str(), "r");
+	seqAA = kseq_init(fpAA);
 
 
 
@@ -1011,6 +1060,7 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			}
 
 			threads.clear();
+			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 
 			for (int j = 0; j < CountFQ; j++)
@@ -1041,6 +1091,7 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			thread.join();
 		}
 		threads.clear();
+		RmPCRSE(P2In,PASS,CountFQ,AAASSS);
 
 		for (int j = 0; j < CountFQ; j++)
 		{
@@ -1136,12 +1187,12 @@ void GetMinCount(Para_A24 * P2In,  const kc_c4x_t *h  )
 		}
 		else
 		{
-				Sum=0;
+			Sum=0;
 			for (i = 1; i < 256 &&  Sum<Half; ++i)
 			{
 				Sum+=cnt[i]*i;
 			}
-	
+
 			if ((P2In->MinCount)==0) { (P2In->MinCount)=i;}
 		}
 
@@ -1158,20 +1209,22 @@ void GetMinCount(Para_A24 * P2In,  const kc_c4x_t *h  )
 
 
 
-void FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  * PASS2,  int & Start,int &   End ,vector <string> & AAASSS,vector <string> & BBBSSS)
+int  FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  * PASS2,  int & Start,int &   End ,vector <string> & AAASSS,vector <string> & BBBSSS)
 {
 	bool  QPASS_AA;
 	bool  QPASS_BB;
-
 	int CountAA=0;
 	int CountBB=0;
-
-
+	//return ;
 	for (int ii=Start; ii<End; ii++)
 	{
-		
+
 		CountAA=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,AAASSS[ii]);
 		CountBB=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,BBBSSS[ii]);
+		//CountAA=1;
+		//CountBB=1;
+		//CountAA=ReadHitNum( h , 31,5,3,AAASSS[ii]);
+		//CountBB=ReadHitNum( h ,31,5,3,BBBSSS[ii]);
 		if (CountAA<(P2In->MinReadKmerCount))
 		{
 			PASS1[ii]=false;
@@ -1180,7 +1233,6 @@ void FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  *
 		{
 			PASS1[ii]= true;
 		}
-
 
 		if (CountBB<(P2In->MinReadKmerCount))
 		{
@@ -1192,14 +1244,9 @@ void FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  *
 			PASS2[ii]= true;
 		}
 
-
-
-
-
 	}
 
-
-
+	return 1;
 }
 
 
@@ -1214,7 +1261,7 @@ void FilterLowHitSE(Para_A24 * P2In, const kc_c4x_t *h , bool  * PASS1,  int & S
 
 	for (int ii=Start; ii<End; ii++)
 	{
-		
+
 		CountAA=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,AAASSS[ii]);
 		if (CountAA<(P2In->MinReadKmerCount))
 		{
@@ -1251,8 +1298,17 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  BBBIII ;
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -1351,6 +1407,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				}
 
 				threads.clear();
+				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 
 
@@ -1393,6 +1450,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -1490,6 +1548,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				}
 
 				threads.clear();
+				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 
 
@@ -1532,6 +1591,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -1598,8 +1658,17 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if (BATCH_SIZE  > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -1668,6 +1737,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 					thread.join();
 				}
 				threads.clear();
+				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 
 
@@ -1699,6 +1769,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -1754,6 +1825,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 					thread.join();
 				}
 				threads.clear();
+				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 
 
@@ -1785,9 +1857,11 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
+				if (PASS1[j])
 				{
 					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
 					OUTHanDle.SEAA++;
@@ -1830,8 +1904,17 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  BBBIII ;
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if (BATCH_SIZE > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -1843,10 +1926,8 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
-
-
-	bool  *PASS1 =new bool [BATCH_SIZE];
-	bool  *PASS2 =new bool [BATCH_SIZE];
+	bool  *PASS1 =new bool [BATCH_SIZE+2];
+	bool  *PASS2 =new bool [BATCH_SIZE+2];
 
 
 
@@ -1918,6 +1999,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				}
 
 				threads.clear();
+				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 
 
@@ -1960,6 +2042,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
@@ -2014,6 +2097,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.PE=0;OUTHanDle.SEBB=0;
 		int CountFQ=0;
+		//		cerr<<"Start\t"<<CountFQ<<"\t"<<BATCH_SIZE<<"\t"<<n_thread<<endl;
 		while(!INA.eof())
 		{
 			getline(INA,ID_1);
@@ -2030,6 +2114,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			BBBIII[CountFQ]=ID_2;
 
 			CountFQ++;
+			//			cerr<<CountFQ<<"Start\t"<<CountFQ<<"\t"<<BATCH_SIZE<<"\t"<<n_thread<<endl;
 			if (CountFQ==BATCH_SIZE)
 			{
 				for (int i = 0; i < n_thread; i++)
@@ -2045,7 +2130,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				}
 
 				threads.clear();
-
+				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 
 
 				for (int j = 0; j < CountFQ; j++)
@@ -2071,7 +2156,8 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			}
 		}
 
-
+		//		cerr<<"StartCountFQ\t"<<CountFQ<<"\t"<<BATCH_SIZE<<"\t"<<n_thread<<endl;
+		CountFQ--;
 		if (CountFQ!=0)
 		{
 			for (int i = 0; i < n_thread; i++)
@@ -2079,6 +2165,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
 				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				//				cerr<<"www\t"<<i<<"\t"<<Start[i]<<"\t"<<End[i]<<endl;
 				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
@@ -2087,7 +2174,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
-
+			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
 			for (int j = 0; j < CountFQ; j++)
 			{
 				if (PASS1[j]  & PASS2[j] )
@@ -2110,6 +2197,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			CountFQ=0;
 		}
 
+		//		cerr<<"aaaeeee\t"<<endl;
 
 		cout<<"INFO: output PE1 read number is "<<OUTHanDle.PE+OUTHanDle.SEAA<<"\n";
 		cout<<"INFO: output PE2 read number is "<<OUTHanDle.PE+OUTHanDle.SEBB<<"\n";
@@ -2152,27 +2240,29 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 
 
-	int BinWind=VECMAX; int BATCH_SIZE;
+	int BinWind=VECMAX; 
+	int BATCH_SIZE;
 	BATCH_SIZE=BinWind*n_thread;
+
+	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
+	{ 
+		BinWind =(P2In->ReadNumber)/n_thread; 
+		if (BinWind<2) {BinWind=2;} ;
+		BATCH_SIZE=BinWind*n_thread;
+	}
+
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
-
-
 
 	std::vector<std::thread> threads;
 
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
 
-
 	bool  *PASS1 =new bool [BATCH_SIZE];
-
-
-
 
 	igzstream INA (FilePath[0].c_str(),ifstream::in); // ifstream  + gz
 	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
 
 	string ID_1 ,seq_1;
 	string ID_2 ,seq_2;
@@ -2196,7 +2286,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			getline(INA,ID_1);
 			getline(INA,seq_1);
 
-
 			if (ID_1.empty())   {continue ; }
 			AAASSS[CountFQ]=seq_1;
 			AAAIII[CountFQ]=ID_1;
@@ -2218,6 +2307,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 				threads.clear();
 
+				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 
 				for (int j = 0; j < CountFQ; j++)
@@ -2231,7 +2321,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				CountFQ=0;
 			}
 		}
-
 
 		if (CountFQ!=0)
 		{
@@ -2248,28 +2337,22 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 			for (int j = 0; j < CountFQ; j++)
 			{
-
-
 				if (PASS1[j])
 				{
 					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
 					OUTHanDle.SEAA++;
 				}
-
 			}
 			CountFQ=0;
 		}
 
-
-
 		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
 
-
 		OUTHanDle.OUTAPE.close();
-
 
 	}
 	else
@@ -2286,7 +2369,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			getline(INA,ID_1);
 			getline(INA,seq_1);
 
-
 			if (ID_1.empty())   {continue ; }
 			AAASSS[CountFQ]=seq_1;
 			AAAIII[CountFQ]=ID_1;
@@ -2307,8 +2389,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				}
 
 				threads.clear();
-
-
+				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
 
 				for (int j = 0; j < CountFQ; j++)
 				{
@@ -2321,7 +2402,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				CountFQ=0;
 			}
 		}
-
 
 		if (CountFQ!=0)
 		{
@@ -2338,11 +2418,11 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				thread.join();
 			}
 			threads.clear();
+			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
+
 
 			for (int j = 0; j < CountFQ; j++)
 			{
-
-
 				if (PASS1[j])
 				{
 					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
@@ -2353,12 +2433,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			CountFQ=0;
 		}
 
-
-
 		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
-
-
-
 
 		OUTHanDle.OUTAPE.close();
 
@@ -2371,10 +2446,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 
 	return 0;
 }
-
-
-
-
 
 //////////////////main///////////////////
 int main (int argc, char *argv[ ])
@@ -2409,27 +2480,23 @@ int main (int argc, char *argv[ ])
 		(P2In->InFq1)=P2In->InSeFq;
 	}
 
-	P2In->LowQint=GetShiftQ((P2In->InFq1),P2In);
+	P2In->LowQint=GetShiftQ((P2In->InFq1),P2In); // (Phred) 33 or 64
 	P2In->MinBaseQ=(P2In->MinBaseQ)+(P2In->LowQint);
 	P2In->AverQ=(P2In->AverQ)+(P2In->LowQint);
-//	P2In->EndReadFlag=(P2In->ReadLength)-(P2In->Kmer)+1;
-	//	P2In->EndLastWindows=(P2In->ReadLength)-(P2In->Windows);
 
-	if ( (P2In->HarfReadLength) < ((P2In->Kmer)+1))
+	if ((P2In->HalfReadLength) < ((P2In->Kmer)+1))
 	{
-		P2In->HarfReadLength=(P2In->ReadLength)/2;
-		if ( (P2In->HarfReadLength)<((P2In->Kmer)+1) )
+		P2In->HalfReadLength=(P2In->ReadLength)/2;
+		if ((P2In->HalfReadLength)<((P2In->Kmer)+1) )
 		{
-			(P2In->HarfReadLength)=(P2In->Kmer)+1;
+			(P2In->HalfReadLength)=(P2In->Kmer)+1;
 		}
 
-		if  (  ( (P2In->MinBaseQ)<2 )   && ( (P2In->AverQ) < 2 )  && ( (P2In->N_Number)==0)  )
+		if  (((P2In->MinBaseQ)<2) && ((P2In->AverQ)<2)  && ((P2In->N_Number)==0))
 		{
 			P2In->FILTER=false ;
 		}
 	}
-
-
 
 	for (int i=0; i<256; i++)
 	{
@@ -2443,38 +2510,35 @@ int main (int argc, char *argv[ ])
 		LowArry[i]=false;
 	}
 
-
-	if  ((P2In->MinCount)==1)
+	if ((P2In->MinCount)==1)
 	{
-
-		RunM1_Work(P2In,InPESE);
+		RunM1_Work(P2In, InPESE);
 		delete P2In ;
 		return (0);
 	}
 
-
 	vector<std::string> FilePath;
 
-	if   (    (InPESE==1 )  &&  ((P2In->LowQint)!=0)  ) // PE FQ
+	if ((InPESE==1) && ((P2In->LowQint)!=0)) // PE FQ
 	{
 		P2In->ReadNumber=(P2In->ReadNumber)/2;
 		RunFQFilterPE(P2In,FilePath );
 	}
-	else if  (   (InPESE==2 )  &&  ((P2In->LowQint)!=0)  )  // SE FQ
+	else if ((InPESE==2) && ((P2In->LowQint)!=0))  // SE FQ
 	{
-		RunFQFilterSE(P2In,FilePath );
+		RunFQFilterSE(P2In,FilePath);
 	}
-	else if  (   (InPESE==1 )  &&  ((P2In->LowQint)==0)  ) // PE FA
+	else if ((InPESE==1) && ((P2In->LowQint)==0)) // PE FA
 	{
 		P2In->ReadNumber=(P2In->ReadNumber)/2;
 		RunFAFilterPE(P2In,FilePath );
 	}
-	else if  (    (InPESE==2 )  &&  ((P2In->LowQint)==0)  ) // SE FA
+	else if ((InPESE==2) && ((P2In->LowQint)==0)) // SE FA
 	{
 		RunFAFilterSE(P2In,FilePath );
 	}
 
-	uint64_t hash_size    = 100000000; // Initial size of hash.  100M 
+	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
 	if  (n_thread>10)
 	{
 		hash_size=int(n_thread*hash_size/10);
@@ -2484,39 +2548,39 @@ int main (int argc, char *argv[ ])
 	int p=KC_BITS ;  // Minimum length of counting field
 
 	// create the hash
-	h = count_file(FilePath, P2In->Kmer , P2In->Windows , p, hash_size , n_thread);
-	
+	h = count_file(FilePath, P2In->Kmer, P2In->Windows, p, hash_size, n_thread);
+
 	GetMinCount(P2In,h);
 
-	if  (   (InPESE==1 )  &&  ((P2In->LowQint)!=0)  ) // PE FQ
+	if ((InPESE==1) && ((P2In->LowQint)!=0)) // PE FQ
 	{
 		if (P2In->OutFa)
 		{
-			RunFA2FA_PEOUT (  P2In,  FilePath, h );
+			RunFA2FA_PEOUT(P2In, FilePath, h);
 		}
 		else
 		{
-			RunFQ2FQ_PEOUT (  P2In,  FilePath, h );
+			RunFQ2FQ_PEOUT(P2In, FilePath, h);
 		}
 	}
-	else if  (   (InPESE==2 )  &&  ((P2In->LowQint)!=0)  )  // SE FQ
+	else if  ((InPESE==2) && ((P2In->LowQint)!=0))  // SE FQ
 	{
 		if (P2In->OutFa)
 		{
-			RunFA2FA_SEOUT (  P2In,  FilePath, h );
+			RunFA2FA_SEOUT(P2In, FilePath, h);
 		}
 		else
 		{
-			RunFQ2FQ_SEOUT (  P2In,  FilePath, h );
+			RunFQ2FQ_SEOUT(P2In, FilePath, h);
 		}
 	}
-	else if (  (InPESE==1 )  &&  ((P2In->LowQint)==0) ) // PE FA
+	else if ((InPESE==1) && ((P2In->LowQint)==0)) // PE FA
 	{
-		RunFA2FA_PEOUT (  P2In,  FilePath, h );
+		RunFA2FA_PEOUT(P2In, FilePath, h);
 	}
-	else if  (   (InPESE==2 )  &&  ((P2In->LowQint)==0) ) // SE FA
+	else if  ((InPESE==2) && ((P2In->LowQint)==0)) // SE FA
 	{
-		RunFA2FA_SEOUT (  P2In,  FilePath, h );
+		RunFA2FA_SEOUT(P2In, FilePath, h);
 	}
 
 	for (auto& file : FilePath)
@@ -2524,29 +2588,14 @@ int main (int argc, char *argv[ ])
 		remove(file.c_str());
 	}
 
-
-
-	 for (int i = 0; i < 1<<p; ++i)
-	 {
-		 kc_c4_destroy(h->h[i]);
-	 }
-	 free(h->h); free(h);
-
+	for (int i = 0; i < 1<<p; ++i)
+	{
+		kc_c4_destroy(h->h[i]);
+	}
+	free(h->h); free(h);
 
 	delete P2In ;
 	return (0);
 }
 
-
-
-
-
-
-
-#endif  //  FQ_KmerSplit_H_
-
-
-
-
-
-
+#endif  //
