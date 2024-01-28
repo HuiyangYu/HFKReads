@@ -43,13 +43,9 @@
 //
 
 using namespace std;
-
+unordered_map <string, bool > PcrReCord ;
 
 KSEQ_INIT(gzFile, gzread)
-
-
-
-
 
 string &  replace_all(string &  str,const  string &  old_Avalue,const string &  new_Avalue)
 {
@@ -62,8 +58,6 @@ string &  replace_all(string &  str,const  string &  old_Avalue,const string &  
 	return   str;
 }
 
-
-
 inline void splitID(string& str,  const string& delimiters = " ")
 {
 	string::size_type pos = str.find_first_of(delimiters,1);
@@ -73,13 +67,12 @@ inline void splitID(string& str,  const string& delimiters = " ")
 	}
 }
 
-
 inline void  LogLackArg( string  flag )
 {
 	cerr << "Error: Lack Argument for [ -"<<flag<<" ]"<<endl;
 }
 
-int GetShiftQ ( string FQPath, Para_A24 * P2In )
+int GetShiftQ (string FQPath, Para_A24 * P2In)
 {
 	igzstream INFQ ((FQPath).c_str(),ifstream::in);
 	if (INFQ.fail())
@@ -99,7 +92,7 @@ int GetShiftQ ( string FQPath, Para_A24 * P2In )
 	}
 
 	tmp2=tmp.substr(tmp.size()-2);
-	if  (tmp2 =="/1"  || tmp2 =="/2" )
+	if (tmp2 =="/1"  || tmp2 =="/2")
 	{
 		P2In->IDAdd=true;
 	}
@@ -107,7 +100,7 @@ int GetShiftQ ( string FQPath, Para_A24 * P2In )
 	getline(INFQ,tmp2);
 	getline(INFQ,tmp3);
 	getline(INFQ,tmp4);
-	if ((tmp[0] == '>'  )  &&  (tmp3[0] == '>'  ))
+	if ((tmp[0] == '>') && (tmp3[0] == '>'))
 	{
 		P2In->ReadLength=tmp2.length();
 		P2In->N_Number=int((P2In->ReadLength)*(P2In->N_Ration));
@@ -119,7 +112,7 @@ int GetShiftQ ( string FQPath, Para_A24 * P2In )
 		getline(INFQ,tmp);
 		if (tmp.length()<=0)  { continue  ; }
 
-		if(A%4!=0)
+		if (A % 4 != 0)
 		{
 			continue;
 		}
@@ -143,7 +136,7 @@ int GetShiftQ ( string FQPath, Para_A24 * P2In )
 	}
 	INFQ.close();
 
-	if(minQ >= 33 &&  minQ <= 78  &&  maxQ >= 33 && maxQ <=78 )
+	if(minQ >= 33 &&  minQ <= 78  &&  maxQ >= 33 && maxQ <= 78)
 	{
 		return 33;
 	}
@@ -157,21 +150,13 @@ int GetShiftQ ( string FQPath, Para_A24 * P2In )
 	}
 }
 
-
-
-
-
-
-
-
-
 inline bool FilterReadLowQ( string & Seq , string & Quli ,Para_A24 * P2In)
 {
 	short int sumQ=0;
 	bool Low=true;
 	int NN=0;
 	string::size_type EEEnd=Seq.size();
-	if (  EEEnd< (P2In->HarfReadLength) ) {return false ;}
+	if (  EEEnd< (P2In->HalfReadLength) ) {return false ;}
 	for(string::size_type ix=0 ; ix<EEEnd ; ix++)
 	{
 		NN+=NArry[Seq[ix]] ;	
@@ -192,12 +177,11 @@ inline bool FilterReadLowQ( string & Seq , string & Quli ,Para_A24 * P2In)
 	return true ;
 }
 
-
 inline bool FilterReadNNNQ( string & Seq  ,Para_A24 * P2In)
 {
 	int NN=0;
 	string::size_type EEEnd=Seq.size();
-	if (  EEEnd< (P2In->HarfReadLength) ) {return false ;}
+	if (  EEEnd< (P2In->HalfReadLength) ) {return false ;}
 	for(string::size_type ix=0 ; ix<EEEnd ; ix++)
 	{
 		NN+=NArry[Seq[ix]] ;	
@@ -210,175 +194,178 @@ void FilterFQPE(Para_A24 * P2In,  bool  * PASS, int & Start,int &   End ,vector 
 {
 	bool  QPASS_AA;
 	bool  QPASS_BB;
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat ;
-	unordered_map <string, bool >   localPCR ;
-
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii]+BBBSSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end() )
-		{
-			PASS[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		QPASS_AA=FilterReadLowQ( AAASSS[ii],AAAQQQ[ii], P2In);
 		QPASS_BB=FilterReadLowQ( BBBSSS[ii],BBBQQQ[ii], P2In);
 		PASS[ii]=QPASS_AA & QPASS_BB ;
 	}
 }
 
-
-
-void M1_FilterFQPE(Para_A24 * P2In,  bool  * PASSAAA,bool  * PASSBBB, int & Start,int &   End ,vector <string> & AAASSS,vector <string> & AAAQQQ,vector <string> & BBBSSS,vector <string> & BBBQQQ)
+void M1_FilterFQPE(Para_A24 * P2In, bool * PASSAAA, bool  * PASSBBB, int & Start, int &   End ,vector <string> & AAASSS,vector <string> & AAAQQQ,vector <string> & BBBSSS,vector <string> & BBBQQQ)
 {
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat;
-	unordered_map <string, bool >   localPCR ;
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii]+BBBSSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end())
-		{
-			PASSAAA[ii]=false;
-			PASSBBB[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		PASSAAA[ii]=FilterReadLowQ(AAASSS[ii],AAAQQQ[ii],P2In);
 		PASSBBB[ii]=FilterReadLowQ(BBBSSS[ii],BBBQQQ[ii],P2In);
 	}
 }
 
+void RmPCRSE (Para_A24 * P2In, bool * PASSAAA, int & End, vector <string> & AAASSS)
+{
+	string  Cat ;
+	unordered_map <string, bool > :: iterator  MapIt;
+	unordered_map <string, bool >   localPCR ;
 
+	for (int ii=0; ii<End; ii++)
+	{
+		if(PASSAAA[ii])
+		{
+			Cat= AAASSS[ii];
+			MapIt=PcrReCord.find(Cat);
+			if ( MapIt != PcrReCord.end() )
+			{
+				PASSAAA[ii]=false;
+				continue ;
+			}
+
+			MapIt=localPCR.find(Cat);
+			if ( MapIt != localPCR.end() )
+			{
+				PASSAAA[ii]=false;
+				PcrReCord[Cat]=true;
+				continue ;
+			}
+			else
+			{
+				localPCR[Cat]=true;
+			}
+		}
+	}
+}
+
+void RmPCRPE (Para_A24 * P2In, bool * PASSAAA, bool * PASSBBB, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
+{
+	if (P2In->PCRA)
+	{
+		RmPCRSE ( P2In, PASSAAA, End, AAASSS);
+		RmPCRSE ( P2In, PASSBBB, End, BBBSSS);
+	}
+	else
+	{
+		string  Cat ;
+		unordered_map <string, bool > :: iterator  MapIt;
+		unordered_map <string, bool >   localPCR ;
+
+		for (int ii=0; ii<End; ii++)
+		{
+			if(PASSAAA[ii])
+			{
+				Cat= AAASSS[ii]+BBBSSS[ii];
+				MapIt=PcrReCord.find(Cat);
+				if ( MapIt != PcrReCord.end() )
+				{
+					PASSAAA[ii]=false;
+					PASSBBB[ii]=false;
+					continue ;
+				}
+
+				MapIt=localPCR.find(Cat);
+				if ( MapIt != localPCR.end() )
+				{
+					PASSAAA[ii]=false;
+					PASSBBB[ii]=false;
+					PcrReCord[Cat]=true;
+					continue ;
+				}
+				else
+				{
+					localPCR[Cat]=true;
+				}
+			}
+		}
+	}
+}
+
+void RmPCRPE( Para_A24 * P2In ,bool  * PASS, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
+{
+	if (P2In->PCRA)
+	{
+		RmPCRSE ( P2In, PASS, End, AAASSS);
+		RmPCRSE ( P2In, PASS, End, BBBSSS);
+	}
+	else
+	{
+		string  Cat ;
+		unordered_map <string, bool > :: iterator  MapIt;
+		unordered_map <string, bool >   localPCR ;
+
+		for (int ii=0; ii<End; ii++)
+		{
+			if(PASS[ii])
+			{
+				Cat= AAASSS[ii]+BBBSSS[ii];
+				MapIt=PcrReCord.find(Cat);
+				if ( MapIt != PcrReCord.end() )
+				{
+					PASS[ii]=false;
+					continue ;
+				}
+
+				MapIt=localPCR.find(Cat);
+				if ( MapIt != localPCR.end() )
+				{
+					PASS[ii]=false;
+					PcrReCord[Cat]=true;
+					continue ;
+				}
+				else
+				{
+					localPCR[Cat]=true;
+				}
+			}
+		}
+
+	}
+}
 
 void FilterFAPE(Para_A24 * P2In,  bool  * PASS, int & Start,int &   End ,vector <string> & AAASSS,vector <string> & BBBSSS)
 {
 	bool  QPASS_AA;
 	bool  QPASS_BB;
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat ;
-	unordered_map <string, bool >   localPCR ;
 
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii]+BBBSSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end() )
-		{
-			PASS[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		QPASS_AA=FilterReadNNNQ( AAASSS[ii], P2In);
 		QPASS_BB=FilterReadNNNQ( BBBSSS[ii], P2In);
 		PASS[ii]=QPASS_AA & QPASS_BB ;
 	}
 }
 
-
-
 void M1_FilterFAPE(Para_A24 * P2In,  bool  * PASSAAA, bool  * PASSBBB , int & Start,int &   End ,vector <string> & AAASSS,vector <string> & BBBSSS)
 {
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat ;
-	unordered_map <string, bool >   localPCR ;
-
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii]+BBBSSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end() )
-		{
-			PASSAAA[ii]=false;
-			PASSBBB[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		PASSAAA[ii]=FilterReadNNNQ( AAASSS[ii], P2In);
 		PASSBBB[ii]=FilterReadNNNQ( BBBSSS[ii], P2In);
 	}
 }
 
-
-
 void FilterFQSE(Para_A24 * P2In,  bool  * PASS, int & Start,int &   End ,vector <string> & AAASSS,vector <string> & AAAQQQ)
 {
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat ;
-	unordered_map <string, bool >   localPCR ;
-
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end() )
-		{
-			PASS[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		PASS[ii]=FilterReadLowQ( AAASSS[ii],AAAQQQ[ii], P2In);
 	}
 }
 
-
-
-
 void FilterFASE(Para_A24 * P2In,  bool  * PASS, int & Start,int &   End ,vector <string> & AAASSS)
 {
-	unordered_map <string, bool > :: iterator  MapIt;
-	string  Cat ;
-	unordered_map <string, bool >   localPCR ;
-
 	for (int ii=Start; ii<End; ii++)
 	{
-		Cat= AAASSS[ii];
-		MapIt=localPCR.find(Cat);
-		if ( MapIt != localPCR.end() )
-		{
-			PASS[ii]=false;
-			continue ;
-		}
-		else
-		{
-			localPCR[Cat]=true;
-		}
 		PASS[ii]=FilterReadNNNQ( AAASSS[ii], P2In);
 	}
 }
-
-
-/*
-inline void splitIDM1(string& str,  const string& delimiters = " ")
-{
-	string::size_type pos = str.find_first_of(delimiters,1);
-	if (string::npos!=pos)
-	{
-		str=str.substr(0, pos);
-	}
-}
-*/
-
-
 
 #endif  // 
 

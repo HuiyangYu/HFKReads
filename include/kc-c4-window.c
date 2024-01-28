@@ -89,33 +89,6 @@ static inline void c4x_insert_buf(buf_c4_t *buf, int p, uint64_t y) // insert a 
 	b->a[b->n++] = y;
 }
 
-
-/*
-   static inline uint64_t calculate_hash1(buf_c4_t *buf, int p, uint64_t y)
-   {
-   int pre = y & ((1 << p) - 1);
-   return (uint64_t)buf[pre].n;
-   }
-
-
-   static inline uint64_t calculate_hash(buf_c4_t *buf, int p, uint64_t y)
-   {
-   int pre = y & ((1 << p) - 1);
-
-   uint64_t *a = buf[pre].a;
-   int n = buf[pre].n;
-
-   for (int i = 0; i < n; ++i) {
-   if (a[i] == y) {
-   return i;
-   }
-   }
-   return -1; // 如果未找到，则返回一个特殊值作为哈希值
-   }
-///*/
-
-
-
 static void count_seq_buf(buf_c4_t *buf, int k, int w, int p, int len, const char *seq) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
@@ -134,7 +107,6 @@ static void count_seq_buf(buf_c4_t *buf, int k, int w, int p, int len, const cha
 		} else l = 0, x[0] = x[1] = 0; // if there is an "N", restart
 	}
 }
-
 
 typedef struct { // global data structure for kt_pipeline()
 	int k, w, block_len, n_thread;
@@ -216,7 +188,6 @@ static void *worker_pipeline(void *data, int step, void *in) // callback for kt_
 	return 0;
 }
 
-
 static kc_c4x_t *count_file(vector<std::string>  & FilePath , int k, int w, int p, int block_size, int n_thread)
 {
 	pldat_t pl;
@@ -251,9 +222,6 @@ static kc_c4x_t *count_file(vector<std::string>  & FilePath , int k, int w, int 
 	return pl.h;
 }
 
-
-
-
 typedef struct {
 	uint64_t c[256];
 } buf_cnt_t;
@@ -276,82 +244,30 @@ static void worker_hist(void *data, long i, int tid) // callback for kt_for()
 		}
 }
 
-
-
-/*
-   static void print_hist(const kc_c4x_t *h, int n_thread)
-   {
-   hist_aux_t a;
-   uint64_t cnt[256];
-   int i, j;
-   a.h = h;
-   CALLOC(a.cnt, n_thread);
-   kt_for(n_thread, worker_hist, &a, 1<<h->p);
-   for (i = 0; i < 256; ++i) cnt[i] = 0;
-   for (j = 0; j < n_thread; ++j)
-   for (i = 0; i < 256; ++i)
-   cnt[i] += a.cnt[j].c[i];
-   free(a.cnt);
-   for (i = 1; i < 256; ++i)
-   printf("%d\t%ld\n", i, (long)cnt[i]);
-   }
-   */
-
-/*
-uint64_t  string_to_kmer(int k, string Kmer)
-{
-	int i;
-	const char *seq=Kmer.c_str();
-	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
-	x[0] = x[1] = 0;
-	for (i = 0; i < k; ++i) 
-	{
-		int c = seq_nt4_table[(uint8_t)seq[i]];
-		if (c > 3)//  an "N" base  no kmer
-		{
-			return  0;
-		}
-		x[0] = (x[0] << 2 | c) & mask;                  // forward strand
-		x[1] = x[1] >> 2 | (uint64_t)(3 - c) << shift;  // reverse strand
-	}
-	uint64_t y = x[0] < x[1]? x[0] : x[1];
-	return   hash64(y, mask) ;
-}
-*/
-
 static int  IntKmer2Value(const kc_c4x_t *h , uint64_t x) 
 {
 	int mask = (1<<(h->p)) - 1;
 	kc_c4_t *g=h->h[x&mask];
 	khint_t k;
 	int absent;
+	int count=0;
 	uint64_t key = (x >> (h->p)) << KC_BITS;
 	k = kc_c4_put(g, key, &absent);
-	int count=0;
-	if (kh_exist(g, k)) {
+	if (kh_exist(g, k))
+	{
 		count = kh_key(g, k) & KC_MAX;
 	}
 	return count ;
 }
 
-
-/*
-static int  get_KmerValue(const kc_c4x_t *h , string Kmer , int k)
-{
-	uint64_t xx= string_to_kmer( k, Kmer);
-	return IntKmer2Value(h,xx);
-}
-*/
-
-
-static int ReadHitNum(const kc_c4x_t *h, int k, int w, int minCount,  string Kmer) 
+static int ReadHitNum(const kc_c4x_t *h, int &  k, int &  w, int  & minCount,  string & Kmer) 
 {
 	int i, l;
 	int Count=0;
 	const char *seq=Kmer.c_str();
 	int len=Kmer.length();
 	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
-	
+		
 	for (i = l = 0, x[0] = x[1] = 0; i < len; ++i) 
 	{
 		int c = seq_nt4_table[(uint8_t)seq[i]];
@@ -373,64 +289,8 @@ static int ReadHitNum(const kc_c4x_t *h, int k, int w, int minCount,  string Kme
 			l = 0, x[0] = x[1] = 0; // if there is an "N", restart
 		}
 	}
-
 	return Count ;
 }
-
-
-
-
-
-
-/*
-   int main(int argc, char *argv[])
-   {
-   kc_c4x_t *h;
-   int i, c, k = 31, w = 10, p = KC_BITS, block_size = 10000000, n_thread = 4;
-   ketopt_t o = KETOPT_INIT;
-   while ((c = ketopt(&o, argc, argv, 1, "k:w:p:b:t:", 0)) >= 0) {
-   if (c == 'k') k = atoi(o.arg);
-   else if (c == 'w') w = atoi(o.arg);
-   else if (c == 'p') p = atoi(o.arg);
-   else if (c == 'b') block_size = atoi(o.arg);
-   else if (c == 't') n_thread = atoi(o.arg);
-
-   }
-   if (argc - o.ind < 1) {
-   fprintf(stderr, "Usage: kc-c4 [options] <in.fa>\n");
-   fprintf(stderr, "Options:\n");
-   fprintf(stderr, "  -k INT     k-mer size [%d]\n", k);
-   fprintf(stderr, "  -w INT     window size [%d]\n", w);
-   fprintf(stderr, "  -p INT     prefix length [%d]\n", p);
-   fprintf(stderr, "  -b INT     block size [%d]\n", block_size);
-   fprintf(stderr, "  -t INT     number of worker threads [%d]\n", n_thread);
-
-   return 1;
-   }
-   if (p < KC_BITS) {
-   fprintf(stderr, "ERROR: -p should be at least %d\n", KC_BITS);
-   return 1;
-   }
-   cerr<<"aaa"<<endl;
-//h = count_Twofile(argv[o.ind],argv[o.ind+1], k, w, p, block_size, n_thread);
-h = count_file(argv[o.ind], k, w, p, block_size, n_thread);
-//print_hist(h, n_thread);
-//string AAA="TCACATCACCCATTTTGTGAATATATGAAAC";
-string AAA="AATTCATACTCACATCACCCATTTTGTGAAT";
-string AA1="CTCACATCACCCATTTTGTGAATATATGAAA";
-string AA2="CACATCACCCATTTTGTGAATATATGAAACG";
-uint64_t BBB=string_to_kmer(k,AAA);
-uint64_t BB1=string_to_kmer(k,AA1);
-uint64_t BB2=string_to_kmer(k,AA2);
-int CC=get_KmerValue(h,BBB);
-cerr<<AAA<<"\t"<<BBB<<"\t"<<CC<<"\n";
-cerr<<BB1<<"\t"<<BB2<<"\t"<<CC<<"\n";
-
-for (i = 0; i < 1<<p; ++i) kc_c4_destroy(h->h[i]);
-free(h->h); free(h);
-return 0;
-}
-*/
 
 #endif
 

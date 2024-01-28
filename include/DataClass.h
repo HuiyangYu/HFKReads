@@ -43,14 +43,10 @@ typedef  long long LLongA;
 
 using namespace std;
 
-
-
 bool NArry[256]={false};
 bool LowArry[256]={true};
 int  n_thread=4;
 int  VECMAX =1024*4;
-
-
 
 struct OUTIOGZ
 {
@@ -62,7 +58,6 @@ struct OUTIOGZ
 	int SEAA;
 	int SEBB;
 };
-
 
 struct OUTIO
 {
@@ -83,7 +78,7 @@ class Para_A24 {
 		string OutFq1;
 		string InSeFq ;
 
-		char N_seq;
+//		char N_seq;
 		int LowQint ;
 		unsigned long ReadNumber;
 		int AverQ;
@@ -92,12 +87,12 @@ class Para_A24 {
 		int Windows;
 		int MinCount;
 		int ReadLength;
-		int HarfReadLength;
+		int HalfReadLength;
 //		int EndReadFlag;
 //		int MaxReadPCR ;
 //		int EndLastWindows;
 		bool OUTGZ ;
-		bool RMPCR;
+		bool PCRA;
 		bool FILTER;
 		bool OutFa;
 		int N_Number;
@@ -105,14 +100,14 @@ class Para_A24 {
 		int MinReadKmerCount;
 		bool IDAdd;
 		bool KmerStatOut;
-		bool PESE;
+//		bool PESE;
 //		bool allRead;
 		Para_A24()
 		{
 			InFq1="";
 			InFq2="";
 			OutFq1="";
-			N_seq='N';
+//			N_seq='N';
 			InSeFq="" ;
 			LowQint=64;
 			MinBaseQ=0;
@@ -125,27 +120,21 @@ class Para_A24 {
 			N_Ration=0.1;
 			ReadNumber=1000000;
 			ReadLength=0;
-			HarfReadLength=0;
+			HalfReadLength=0;
 //			EndReadFlag=0;
 //			MaxReadPCR=4000000;
 			//EndLastWindows=60;
 			OUTGZ=false;
-			RMPCR=true;
+			PCRA=false;
 			OutFa=true;
 			MinReadKmerCount=5;
 			IDAdd=false;
 			KmerStatOut=false;
 			FILTER=true;
 //			hVal=0;
-			PESE=false;
+//			PESE=false;
 		}
 };
-
-
-
-
-
-
 
 #endif  // 
 
