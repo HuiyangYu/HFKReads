@@ -213,6 +213,11 @@ void M1_FilterFQPE(Para_A24 * P2In, bool * PASSAAA, bool  * PASSBBB, int & Start
 
 void RmPCRSE (Para_A24 * P2In, bool * PASSAAA, int & End, vector <string> & AAASSS)
 {
+	if (P2In->PCRA==0)
+	{
+		return ;
+	}
+
 	string  Cat ;
 	unordered_map <string, bool > :: iterator  MapIt;
 	unordered_map <string, bool >   localPCR ;
@@ -246,12 +251,12 @@ void RmPCRSE (Para_A24 * P2In, bool * PASSAAA, int & End, vector <string> & AAAS
 
 void RmPCRPE (Para_A24 * P2In, bool * PASSAAA, bool * PASSBBB, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
 {
-	if (P2In->PCRA)
+	if ((P2In->PCRA)==2)
 	{
 		RmPCRSE ( P2In, PASSAAA, End, AAASSS);
 		RmPCRSE ( P2In, PASSBBB, End, BBBSSS);
 	}
-	else
+	else if ((P2In->PCRA)==1)
 	{
 		string  Cat ;
 		unordered_map <string, bool > :: iterator  MapIt;
@@ -289,12 +294,12 @@ void RmPCRPE (Para_A24 * P2In, bool * PASSAAA, bool * PASSBBB, int & End,vector 
 
 void RmPCRPE( Para_A24 * P2In ,bool  * PASS, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
 {
-	if (P2In->PCRA)
+	if ((P2In->PCRA)==2)
 	{
 		RmPCRSE ( P2In, PASS, End, AAASSS);
 		RmPCRSE ( P2In, PASS, End, BBBSSS);
 	}
-	else
+	else if ((P2In->PCRA)==1)
 	{
 		string  Cat ;
 		unordered_map <string, bool > :: iterator  MapIt;

@@ -46,7 +46,7 @@ using namespace std;
 bool NArry[256]={false};
 bool LowArry[256]={true};
 int  n_thread=4;
-int  VECMAX =1024*4;
+int  VECMAX =1024*10000;
 
 struct OUTIOGZ
 {
@@ -78,7 +78,6 @@ class Para_A24 {
 		string OutFq1;
 		string InSeFq ;
 
-//		char N_seq;
 		int LowQint ;
 		unsigned long ReadNumber;
 		int AverQ;
@@ -88,11 +87,8 @@ class Para_A24 {
 		int MinCount;
 		int ReadLength;
 		int HalfReadLength;
-//		int EndReadFlag;
-//		int MaxReadPCR ;
-//		int EndLastWindows;
 		bool OUTGZ ;
-		bool PCRA;
+		int PCRA;
 		bool FILTER;
 		bool OutFa;
 		int N_Number;
@@ -100,20 +96,17 @@ class Para_A24 {
 		int MinReadKmerCount;
 		bool IDAdd;
 		bool KmerStatOut;
-//		bool PESE;
-//		bool allRead;
+
 		Para_A24()
 		{
 			InFq1="";
 			InFq2="";
 			OutFq1="";
-//			N_seq='N';
 			InSeFq="" ;
 			LowQint=64;
 			MinBaseQ=0;
 			AverQ=20;
 			Kmer=31;
-//			allRead=false;
 			Windows=5;
 			MinCount=3;
 			N_Number=2;
@@ -121,18 +114,13 @@ class Para_A24 {
 			ReadNumber=1000000;
 			ReadLength=0;
 			HalfReadLength=0;
-//			EndReadFlag=0;
-//			MaxReadPCR=4000000;
-			//EndLastWindows=60;
+			PCRA=0;
 			OUTGZ=false;
-			PCRA=false;
 			OutFa=true;
 			MinReadKmerCount=5;
 			IDAdd=false;
 			KmerStatOut=false;
 			FILTER=true;
-//			hVal=0;
-//			PESE=false;
 		}
 };
 
