@@ -144,6 +144,10 @@ int GetShiftQ (string FQPath, Para_A24 * P2In)
 	{
 		return 64;
 	}
+	else if (minQ < 55)
+	{
+		return 33;
+	}
 	else
 	{
 		return 64 ;
