@@ -4,8 +4,8 @@
 ##  1. Install
 ### (1) Pre-built binaries for x86_64 Linux
 ```
-wget -c https://github.com/HuiyangYu/HFKR/releases/download/v2.01/HFKR-2.01-Linux-x86_64.tar.gz
-tar zvxf HFKR-2.01-Linux-x86_64.tar.gz
+wget -c https://github.com/HuiyangYu/HFKR/releases/download/v2.02/HFKR-2.02-Linux-x86_64.tar.gz
+tar zvxf HFKR-2.02-Linux-x86_64.tar.gz
 cd HFKR-2.01-Linux-x86_64
 ./hfkreads -h
 ```
@@ -37,11 +37,12 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutFrefix
    -n	<int>   read number to use [1000000]
    -a	        use all the read number
  Other options:
+   -d  <int>    mode for deduplication (0:NO, 1:PE, 2:SE) [0]
    -c           compress the outPut File
    -f           outPut the KmerFre File
    -A           keep output quality info
    -t           thread to run [4]
-   -h           show help [v2.01]
+   -h           show help [v2.02]
 ```
 ## 3. Example
 ### 3.1 Extracting high-frequency k-mer reads from paired-end sequencing reads
