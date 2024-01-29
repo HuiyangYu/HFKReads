@@ -6,7 +6,7 @@
 ```
 wget -c https://github.com/HuiyangYu/HFKR/releases/download/v2.02/HFKR-2.02-Linux-x86_64.tar.gz
 tar zvxf HFKR-2.02-Linux-x86_64.tar.gz
-cd HFKR-2.01-Linux-x86_64
+cd HFKR-2.02-Linux-x86_64
 ./hfkreads -h
 ```
 ### (2) Building from source
