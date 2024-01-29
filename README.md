@@ -66,12 +66,12 @@ To filter out low-quality reads only, the default '-m 2' parameter should change
 
 ### 3.4 Filter ont ultra-long reads
 ```
-hfkreads -s ont.fq.gz -m 1 -q 7 -l 20000 -c -A -o ont.filtered
+hfkreads -s ont.fq.gz -m 1 -q 7 -l 20000 -a -c -A -o ont.filtered
 ```
 The output result consists of a single file named "ont.filtered.fq.gz".
 ### 3.5 Filter Pacbio HIFI reads
 ```
-hfkreads -s HIFI.fq.gz -m 1 -q 20 -l 10000 -c -A -o HIFI.filtered
+hfkreads -s HIFI.fq.gz -m 1 -q 20 -l 10000 -a -c -A -o HIFI.filtered
 ```
 The output result consists of a single file named "HIFI.filtered.fq.gz".
 
