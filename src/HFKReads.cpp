@@ -210,7 +210,7 @@ int parse_cmd_FqSplit(int argc, char **argv , Para_A24 * P2In  )
 			if  ((P2In->PCRA)>2 ||  (P2In->PCRA)<0)
 			{
 				cerr<<"Warning: -d should be (0,1,2), we modify it to be 1\n ";
-				P2In->PCRA=31;
+				P2In->PCRA=1;
 			}
 		}
 		else if (flag  == "c")
@@ -2272,6 +2272,14 @@ int main (int argc, char *argv[ ])
 		{
 			P2In->FILTER=false ;
 		}
+	}
+
+	if (((P2In->ReadLength)<500) && ((P2In->PCRA)>=1))
+	{
+		VECMAX=1024*10000;
+	}
+	else{
+		VECMAX=1024*4;
 	}
 
 	for (int i=0; i<256; i++)
