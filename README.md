@@ -1,18 +1,18 @@
-# HFKR
-<b>HFKR: An ultra-fast and efficient tool for high frequency kmer sequencing reads extraction</b>
+# HFKReads
+<b>HFKReads: An ultra-fast and efficient tool for high frequency kmer sequencing reads extraction</b>
 
 ##  1. Install
 ### (1) Pre-built binaries for x86_64 Linux
 ```
-wget -c https://github.com/HuiyangYu/HFKR/releases/download/v2.02/HFKR-2.02-Linux-x86_64.tar.gz
-tar zvxf HFKR-2.02-Linux-x86_64.tar.gz
-cd HFKR-2.02-Linux-x86_64
+wget -c https://github.com/HuiyangYu/HFKReads/releases/download/v2.02/HFKReads-2.02-Linux-x86_64.tar.gz
+tar zvxf HFKReads-2.02-Linux-x86_64.tar.gz
+cd HFKReads-2.02-Linux-x86_64
 ./hfkreads -h
 ```
 ### (2) Building from source
 ```
-git clone https://github.com/HuiyangYu/HFKR.git
-cd HFKR
+git clone https://github.com/HuiyangYu/HFKReads.git
+cd HFKReads
 make
 cd bin
 ./hfkreads -h
