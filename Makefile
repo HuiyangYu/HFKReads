@@ -1,5 +1,4 @@
 BIN_DIR := $(shell pwd)/bin
-LIB_DIR := $(shell pwd)/lib
 SRC_DIR := $(shell pwd)/src
 INCLUDE_DIR := $(shell pwd)/include
 
