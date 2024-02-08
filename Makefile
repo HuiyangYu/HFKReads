@@ -8,7 +8,7 @@ INCLUDE_DIR := $(shell pwd)/include
 all: $(BIN_DIR)/hfkreads
 
 $(BIN_DIR)/hfkreads: $(SRC_DIR)/HFKReads.cpp | $(BIN_DIR)
-	g++ -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR) --std=c++11 -g -O3 $< -lz -pthread -I$(INCLUDE_DIR) -o $@
+	g++ --std=c++11 -g -O3 $< -lz -pthread -I$(INCLUDE_DIR) -o $@
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
