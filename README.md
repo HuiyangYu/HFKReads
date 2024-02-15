@@ -1,5 +1,5 @@
 # HFKReads
-<b>HFKReads: An ultra-fast and efficient tool for high frequency kmer sequencing reads extraction</b>
+<b> An ultra-fast and efficient tool for high frequency kmer sequencing reads extraction</b>
 
 ##  1. Install
 ### (1) Pre-built binaries for x86_64 Linux
