@@ -1,25 +1,8 @@
-/* The MIT License
+/* The GPL-3.0 License
 
    Copyright (c) 2023- by Huiyang Yu, Weiming He, Chunmei Shi.
 
-   Permission is hereby granted, free of charge, to any person obtaining a copy
-   of this software and associated documentation files (the "Software"), to deal
-   in the Software without restriction, including without limitation the rights
-   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-   copies of the Software, and to permit persons to whom the Software is
-   furnished to do so, subject to the following conditions:
-
-   The above copyright notice and this permission notice shall be included in all
-   copies or substantial portions of the Software.
-
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-   SOFTWARE.
-   */
+*/
 
 #ifndef FQ_KmerSplit_H_
 #define FQ_KmerSplit_H_
@@ -1711,15 +1694,14 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  BBBSSS ;
 	vector <string>  BBBIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
+	int BinWind=VECMAX;
+	int BATCH_SIZE=VECMAX;
 
 	if (BATCH_SIZE > (P2In->ReadNumber)) 
 	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
+		BinWind = P2In->ReadNumber; 
 		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
+		BATCH_SIZE=BinWind;
 	}
 
 	AAASSS.resize(BATCH_SIZE+2);
