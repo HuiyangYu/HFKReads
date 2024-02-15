@@ -9,7 +9,7 @@ tar zvxf HFKReads-2.02-Linux-x86_64.tar.gz
 cd HFKReads-2.02-Linux-x86_64
 ./hfkreads -h
 ```
-### (2) Building from source
+### (2) Building from source （Linux or Mac）
 ```
 git clone https://github.com/HuiyangYu/HFKReads.git
 cd HFKReads
