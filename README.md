@@ -64,18 +64,7 @@ hfkreads -s SE.fq.gz -m 1 -o test4
 ```
 To filter out low-quality reads only, the default '-m 2' parameter should change to '-m 1'.
 
-### 3.4 Filter ont ultra-long reads
-```
-hfkreads -s ont.fq.gz -m 1 -q 7 -l 20000 -a -c -A -o ont.filtered
-```
-The output result consists of a single file named "ont.filtered.fq.gz".
-### 3.5 Filter Pacbio HIFI reads
-```
-hfkreads -s HIFI.fq.gz -m 1 -q 20 -l 10000 -a -c -A -o HIFI.filtered
-```
-The output result consists of a single file named "HIFI.filtered.fq.gz".
-
-### 3.6 Other options
+### 3.4 Other options
 The '-A' parameter outputs quality values in fastq format, while the default is to output files in fasta format.<br>
 The '-c' parameter compresses the output file, and by default, the output file is uncompressed.
 
