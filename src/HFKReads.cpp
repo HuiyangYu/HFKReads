@@ -21,19 +21,18 @@
 #include <cstdio>
 #include <vector>
 #include <zlib.h>
-#include "./gzstream.c"
-#include "./kseq.h"
-#include "./comm.hpp"
-#include "./M1_work.hpp"
-#include "./kc-c4-window.c"
+#include "gzstream.c"
+#include "kseq.h"
+#include "comm.hpp"
+#include "M1_work.hpp"
+#include "kc-c4-window.c"
 
 typedef  long long LLongA;
 
 using namespace std;
 //KSEQ_INIT(gzFile, gzread)
 
-int  print_usage_FqSplit()
-{
+int  print_usage_FqSplit() {
 	cout <<""
 		"Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix\n"
 		" Input/Output options:\n"
@@ -53,238 +52,203 @@ int  print_usage_FqSplit()
 		"   -n	<int>   read number to use [1000000]\n"
 		"   -a	        use all the read\n"
 		" Other options:\n"
-		"   -d  <int>    mode for de-duplication (0:NO, 1:PE, 2:SE) [0]\n"
+		"   -d  <int>    mode for de-duplication (0:NO, 1:SE, 1:PE) [0]\n"
 		"   -f           output the kmer frequency file\n"
 		"   -A           keep base quality in output\n"
 		"   -c           compress the output File\n"
-		"   -t           number of threads [4]\n"
+		"   -t           number of threads [1]\n"
 		"   -h           show help [v2.02]\n"
 		"\n";
 	return 1;
 }
 //
-int parse_cmd_FqSplit(int argc, char **argv , Para_A24 * P2In  )
-{
-	if (argc <=3  ) {print_usage_FqSplit();return 0;}
+int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
+	if (argc <=3) {print_usage_FqSplit();return 0;}
 
 	int err_flag = 0;
 
-	for(int i = 1; i < argc || err_flag; i++)
-	{
-		if(argv[i][0] != '-')
-		{
+	for(int i = 1; i < argc || err_flag; i++) {
+		if(argv[i][0] != '-') {
 			cerr << "Error: command option error! please check." << endl;
 			return 0;
 		}
 		string flag=argv[i] ;
 		flag=replace_all(flag,"-","");
+
 		//Input/Output options
-		if (flag  == "1" )
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		if (flag == "1" ) {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->InFq1=argv[i];
 		}
-		else if (flag  == "2")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "2") {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->InFq2=argv[i];
 		}
-		else if (flag  ==  "s" )
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "s" ) {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->InSeFq=argv[i];
 		}
-		else if (flag  ==  "o" )
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "o" ) {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->OutFq1=argv[i];
 		}
+
 		//Filter low quality
-		else if (flag  ==  "b")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "b") {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->MinBaseQ=atoi(argv[i]);
 		}
-		else if (flag  ==  "q")
-		{
+		else if (flag == "q") {
 			if(i + 1 == argc) { LogLackArg(flag) ; return 0;}
 			i++;
 			P2In->AverQ=atoi(argv[i]);
 		}
-		else if (flag  ==  "l")
-		{
+		else if (flag == "l") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->HalfReadLength=atoi(argv[i]);
-			if  ( (P2In->HalfReadLength)<11 )
-			{
+			if ((P2In->HalfReadLength)<11) {
 				P2In->HalfReadLength=11;
 				cerr<<"Warings: -l should >= 11, we set it to 11\n";
 			}
 		}
-		else if (flag  ==  "r")
-		{
+		else if (flag == "r") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
 			P2In->N_Ration=atof(argv[i]);
 		}
+
 		//Filter low freq reads
-		else if (flag  ==  "k")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "k") {
+			if(i + 1 == argc) { LogLackArg(flag) ; return 0;}
 			i++;
 			P2In->Kmer=atoi(argv[i]);
-			if ( (P2In->Kmer) >31 || (P2In->Kmer) <  9 )
-			{
+			if ( (P2In->Kmer) >31 || (P2In->Kmer) < 9) {
 				cerr<<"Warning -k  [9,31] ,we modify it to be  31\n ";
 				P2In->Kmer=31;
 			}
 		}
-		else if (flag  ==  "w")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "w") {
+			if(i + 1 == argc) {LogLackArg(flag); return 0;}
 			i++;
 			P2In->Windows=atoi(argv[i]);
-			if  ( (P2In->Windows)<1 )
-			{
+			if  ((P2In->Windows)<1){
 				P2In->Windows=1;
 				cerr<<"Warnings: -w must be >=1, we change it to 1 \n";
 			}
 		}
-		else if (flag  ==  "m")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "m"){
+			if(i + 1 == argc) {LogLackArg(flag); return 0;}
 			i++;
 			P2In->MinCount=atoi(argv[i]);
-			if  ((P2In->MinCount)<1)
-			{
+			if  ((P2In->MinCount)<1) {
 				cerr<<"Warnings: -m should >= 1, we set it to 1\n";
 				(P2In->MinCount)=1;
 			}
 		}
-		else if (flag  =="x")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "x") {
+			if(i + 1 == argc) {LogLackArg(flag); return 0;}
 			i++;
 			P2In->MinReadKmerCount=atoi(argv[i]);
-			if( (P2In->MinReadKmerCount)<1 )  { P2In->MinReadKmerCount=1 ;}
+			if( (P2In->MinReadKmerCount)<1 ) {P2In->MinReadKmerCount=1;}
 		}
-		else if (flag  ==  "n")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag == "n") {
+			if(i + 1 == argc) { LogLackArg(flag) ; return 0;}
 			i++;
 			P2In->ReadNumber=atoi(argv[i]);
 		}
-		else if (flag  == "A")
-		{
+		else if (flag == "A") {
 			P2In->OutFa=false;
 		}
+
 		//other options
-		else if (flag  == "d")
-		{
+		else if (flag  == "d") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;			
 			P2In->PCRA=atoi(argv[i]);
-			if  ((P2In->PCRA)>2 ||  (P2In->PCRA)<0)
-			{
+			if ((P2In->PCRA)>2 ||  (P2In->PCRA)<0) {
 				cerr<<"Warning: -d should be (0,1,2), we modify it to be 1\n ";
 				P2In->PCRA=1;
 			}
 		}
-		else if (flag  == "c")
-		{
+		else if (flag  == "c") {
 			P2In->OUTGZ=true;
 		}
-		else if (flag  == "f")
-		{
+		else if (flag  == "f") {
 			P2In->KmerStatOut=true;
 		}
-		else if (flag  == "a")
-		{
+		else if (flag  == "a") {
 			P2In->ReadNumber=LONG_MAX;
 			//P2In->allRead=true;
 		}
-		else if (flag  ==  "t")
-		{
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
+		else if (flag  ==  "t") {
+			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
 			n_thread=atoi(argv[i]);
 		}
-		else if (flag  == "help" || flag  == "h")
-		{
+		else if (flag  == "help" || flag  == "h") {
 			print_usage_FqSplit();return 0;
 		}
 		//
-		else if (flag  ==  "u")
-		{
+		else if (flag  ==  "u") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
 			VECMAX=atoi(argv[i]);
 		}
-		else
-		{
+		else {
 			cerr << "Error: UnKnow argument -"<<flag<<endl;
 			return 0;
 		}
 	}
 
-	if ( (P2In->InSeFq).empty() && (P2In->InFq1).empty() )
-	{
-		cerr<< "Error: -1/-2 or -s lack argument for the must"<<endl;
-		return 0;
-	}
-
-	if ( (P2In->OutFq1).empty() )
-	{
-		cerr<< "Error: -o lack argument for the must"<<endl;
-		return 0;
-	}
-
-	if  ( (P2In->InFq1).empty())
-	{
-		return 2 ;
-	}
-	else if ( (P2In->InFq2).empty() || (P2In->InFq1).empty() )
-	{
-		cerr<< "Error: -1 and -1 must set together"<<endl;
-		return 0;
-	}
-	else
-	{
-		return  1 ;
+	if ((P2In->InSeFq).empty()){
+		if ((P2In->InFq1).empty() || (P2In->InFq2).empty()){
+			cerr<< "Error: PE reads should input together"<<endl;
+			return 0;
+		}else{
+			if (access((P2In->InFq1).c_str(), 0) != 0){
+				cerr<<"Error: can't find this file -1 "<<(P2In->InFq1)<<endl;
+				return 0 ;
+			}else if ((access((P2In->InFq2).c_str(), 0) != 0)){
+				cerr<<"Error: can't find this file -2 "<<(P2In->InFq2)<<endl;
+				return 0 ;
+			}else{
+				return 1;
+			}
+		}
+	}else{
+		if (!(P2In->InFq1).empty() || !(P2In->InFq2).empty()){
+			cerr<< "Error: PE reads can't input with SE reads"<<endl;
+			return 0;
+		}else{
+			if (access((P2In->InSeFq).c_str(), 0) != 0){
+				cerr<<"Error: can't find this file -s "<<(P2In->InSeFq)<<endl;
+				return 0 ;
+			}else{
+				return 1;
+			}
+		}
 	}
 }
 
-int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
-{
+int Run_PE_fq_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
 	std::ios::sync_with_stdio(false);
 	std::cin.tie(0);
 
-	vector <string>  AAASSS ;
-	vector <string>  AAAQQQ ;
-	vector <string>  AAAIII ;
-
+	vector <string>  AAAIII;
+	vector <string>  AAASSS;
+	vector <string>  AAAQQQ;
+	
+	vector <string>  BBBIII ;
 	vector <string>  BBBSSS ;
 	vector <string>  BBBQQQ ;
-	vector <string>  BBBIII ;
-
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if (BATCH_SIZE > (P2In->ReadNumber)) 
-	{
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-		}
-
+	
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -357,6 +321,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
 				}
 
@@ -388,8 +353,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
-
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
 			}
 			for (auto& thread : threads)
@@ -442,6 +406,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
 				}
 
@@ -471,8 +436,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
-
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
 			}
 			for (auto& thread : threads)
@@ -510,8 +474,7 @@ int RunFQFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	return 0;
 }
 
-int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
-{
+int Run_SE_fq_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
 	std::ios::sync_with_stdio(false);
 	std::cin.tie(0);
@@ -519,17 +482,6 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	vector <string>  AAASSS ;
 	vector <string>  AAAQQQ ;
 	vector <string>  AAAIII ;
-
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
-	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-	}
 
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
@@ -584,6 +536,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
 				}
 
@@ -613,7 +566,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
 			}
 			for (auto& thread : threads)
@@ -655,6 +608,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
 				}
 
@@ -683,7 +637,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
 			}
 			for (auto& thread : threads)
@@ -716,7 +670,7 @@ int RunFQFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	return 0;
 }
 
-int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
+int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
 {
 	std::ios::sync_with_stdio(false);
 	std::cin.tie(0);
@@ -727,16 +681,6 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	vector <string>  BBBSSS ;
 	vector <string>  BBBIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
-	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-	}
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -799,6 +743,7 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFAPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
@@ -830,7 +775,7 @@ int RunFAFilterPE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 		{
 			Start[i]=i*BinWind;
 			End[i]=Start[i]+BinWind;
-			if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+			if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 			threads.push_back(std::thread(FilterFAPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 		}
 
@@ -892,17 +837,6 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	vector <string>  AAASSS ;
 	vector <string>  AAAIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if (BATCH_SIZE > (P2In->ReadNumber)) 
-	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-	}
-
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -950,6 +884,7 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterFASE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 			}
 
@@ -979,7 +914,7 @@ int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
 		{
 			Start[i]=i*BinWind;
 			End[i]=Start[i]+BinWind;
-			if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+			if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 			threads.push_back(std::thread(FilterFASE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 		}
 
@@ -1093,7 +1028,7 @@ int  FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  *
 
 		CountAA=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,AAASSS[ii]);
 		CountBB=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,BBBSSS[ii]);
-		
+
 		if (CountAA<(P2In->MinReadKmerCount))
 		{
 			PASS1[ii]=false;
@@ -1152,17 +1087,6 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  BBBQQQ ;
 	vector <string>  BBBIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
-	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-	}
-
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -1202,7 +1126,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 		outputFileASE=OUT+"_se_1.fq.gz";
 		outputFileBSE=OUT+"_se_2.fq.gz";
 
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.PE=0;OUTHanDle.SEBB=0;
+		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
 
 		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
 		OUTHanDle.OUTASE.open(outputFileASE.c_str());
@@ -1243,6 +1167,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 				}
 
@@ -1283,7 +1208,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
@@ -1342,7 +1267,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
 		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
 
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.PE=0;OUTHanDle.SEBB=0;
+		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
 		int CountFQ=0;
 
 		while(!INA.eof())
@@ -1373,6 +1298,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 				}
 
@@ -1413,7 +1339,7 @@ int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
@@ -1478,17 +1404,12 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  AAAQQQ ;
 	vector <string>  AAAIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if (BATCH_SIZE  > (P2In->ReadNumber)) 
+	if (BATCH_SIZE > (P2In->ReadNumber)) 
 	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
+		BinWind =((P2In->ReadNumber)/n_thread)+1;
+		if (BinWind<32){BinWind=32;}
 		BATCH_SIZE=BinWind*n_thread;
 	}
-
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAQQQ.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
@@ -1539,6 +1460,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 				}
 
@@ -1567,7 +1489,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 			}
 
@@ -1620,6 +1542,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 				}
 
@@ -1648,7 +1571,7 @@ int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 			}
 
@@ -1694,16 +1617,6 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  BBBSSS ;
 	vector <string>  BBBIII ;
 
-	int BinWind=VECMAX;
-	int BATCH_SIZE=VECMAX;
-
-	if (BATCH_SIZE > (P2In->ReadNumber)) 
-	{ 
-		BinWind = P2In->ReadNumber; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind;
-	}
-
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -1740,7 +1653,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 		outputFileASE=OUT+"_se_1.fa.gz";
 		outputFileBSE=OUT+"_se_2.fa.gz";
 
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.PE=0;OUTHanDle.SEBB=0;
+		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
 		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
 		OUTHanDle.OUTASE.open(outputFileASE.c_str());
 		OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
@@ -1774,6 +1687,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 				}
 
@@ -1814,7 +1728,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
@@ -1872,7 +1786,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
 		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
 
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.PE=0;OUTHanDle.SEBB=0;
+		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
 		int CountFQ=0;
 		//		cerr<<"Start\t"<<CountFQ<<"\t"<<BATCH_SIZE<<"\t"<<n_thread<<endl;
 		while(!INA.eof())
@@ -1898,7 +1812,8 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
-					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
+					threads.push_back(std::thread(FilterLowHitPE,P2In,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 				}
 
 				for (auto& thread : threads)
@@ -1931,7 +1846,7 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				CountFQ=0;
 			}
 		}
-		
+
 		CountFQ--;
 		if (CountFQ!=0)
 		{
@@ -1939,9 +1854,8 @@ int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
-				
-				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
+				threads.push_back(std::thread(FilterLowHitPE,P2In,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
 			}
 
 			for (auto& thread : threads)
@@ -2002,17 +1916,6 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 	vector <string>  AAASSS ;
 	vector <string>  AAAIII ;
 
-	int BinWind=VECMAX; 
-	int BATCH_SIZE;
-	BATCH_SIZE=BinWind*n_thread;
-
-	if  (BATCH_SIZE  > (P2In->ReadNumber)) 
-	{ 
-		BinWind =(P2In->ReadNumber)/n_thread; 
-		if (BinWind<2) {BinWind=2;} ;
-		BATCH_SIZE=BinWind*n_thread;
-	}
-
 	AAASSS.resize(BATCH_SIZE+2);
 	AAAIII.resize(BATCH_SIZE+2);
 
@@ -2059,6 +1962,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 				}
 
@@ -2089,7 +1993,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 			}
 
@@ -2141,6 +2045,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 				{
 					Start[i]=i*BinWind;
 					End[i]=Start[i]+BinWind;
+					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 				}
 
@@ -2170,7 +2075,7 @@ int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc
 			{
 				Start[i]=i*BinWind;
 				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  }
+				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
 				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
 			}
 
@@ -2256,13 +2161,19 @@ int main (int argc, char *argv[ ])
 		}
 	}
 
-	if (((P2In->ReadLength)<500) && ((P2In->PCRA)>=1))
-	{
-		VECMAX=1024*10000;
+	int read_length=(P2In->ReadLength);
+	if (VECMAX==1024*1024){
+		if (read_length>=30000){
+			VECMAX=1024*10;
+		} else if (read_length>500 && read_length<30000){
+			VECMAX=1024*100;
+		} else {
+			VECMAX=1024*1000;
+		}
 	}
-	else{
-		VECMAX=1024*4;
-	}
+	
+	BinWind = ceil(VECMAX/n_thread);
+	BATCH_SIZE = BinWind*n_thread;
 
 	for (int i=0; i<256; i++)
 	{
@@ -2285,28 +2196,23 @@ int main (int argc, char *argv[ ])
 
 	vector<std::string> FilePath;
 
-	if ((InPESE==1) && ((P2In->LowQint)!=0)) // PE FQ
-	{
+	if ((InPESE==1) && ((P2In->LowQint)!=0)){ // PE FQ
 		P2In->ReadNumber=(P2In->ReadNumber)/2;
-		RunFQFilterPE(P2In,FilePath);
+		Run_PE_FQ_Filter(P2In,FilePath);
 	}
-	else if ((InPESE==2) && ((P2In->LowQint)!=0))  // SE FQ
-	{
-		RunFQFilterSE(P2In,FilePath);
+	else if ((InPESE==2) && ((P2In->LowQint)!=0)){  // SE FQ
+		Run_SE_fq_filter(P2In,FilePath);
 	}
-	else if ((InPESE==1) && ((P2In->LowQint)==0)) // PE FA
-	{
+	else if ((InPESE==1) && ((P2In->LowQint)==0)){ // PE FA
 		P2In->ReadNumber=(P2In->ReadNumber)/2;
-		RunFAFilterPE(P2In,FilePath);
+		Run_PE_fa_filter(P2In,FilePath);
 	}
-	else if ((InPESE==2) && ((P2In->LowQint)==0)) // SE FA
-	{
+	else if ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
 		RunFAFilterSE(P2In,FilePath);
 	}
 
 	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
-	if  (n_thread>10)
-	{
+	if (n_thread>10) {
 		hash_size=int(n_thread*hash_size/10);
 	}
 
@@ -2318,46 +2224,37 @@ int main (int argc, char *argv[ ])
 
 	GetMinCount(P2In,h);
 
-	if ((InPESE==1) && ((P2In->LowQint)!=0)) // PE FQ
-	{
-		if (P2In->OutFa)
-		{
+	if ((InPESE==1) && ((P2In->LowQint)!=0)){ // PE FQ
+		if (P2In->OutFa) {
 			RunFA2FA_PEOUT(P2In, FilePath, h);
 		}
-		else
-		{
+		else {
 			RunFQ2FQ_PEOUT(P2In, FilePath, h);
 		}
 	}
-	else if  ((InPESE==2) && ((P2In->LowQint)!=0))  // SE FQ
-	{
-		if (P2In->OutFa)
-		{
+	else if  ((InPESE==2) && ((P2In->LowQint)!=0)){ // SE FQ
+		if (P2In->OutFa) {
 			RunFA2FA_SEOUT(P2In, FilePath, h);
 		}
-		else
-		{
+		else {
 			RunFQ2FQ_SEOUT(P2In, FilePath, h);
 		}
 	}
-	else if ((InPESE==1) && ((P2In->LowQint)==0)) // PE FA
-	{
+	else if ((InPESE==1) && ((P2In->LowQint)==0)){ // PE FA
 		RunFA2FA_PEOUT(P2In, FilePath, h);
 	}
-	else if  ((InPESE==2) && ((P2In->LowQint)==0)) // SE FA
-	{
+	else if  ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
 		RunFA2FA_SEOUT(P2In, FilePath, h);
 	}
 
-	for (auto& file : FilePath)
-	{
+	for (auto& file : FilePath){
 		remove(file.c_str());
 	}
 
-	for (int i = 0; i < 1<<p; ++i)
-	{
+	for (int i = 0; i < 1<<p; ++i) {
 		kc_c4_destroy(h->h[i]);
 	}
+	
 	free(h->h); free(h);
 
 	delete P2In ;
