@@ -36,9 +36,9 @@
 #include <map>
 #include <cstdio>
 #include <zlib.h>
-#include "./gzstream.c"
-#include "./kseq.h"
-#include "./DataClass.h"
+#include "gzstream.c"
+#include "kseq.h"
+#include "DataClass.h"
 
 //
 
@@ -94,7 +94,7 @@ int GetShiftQ (string FQPath, Para_A24 * P2In)
 	tmp2=tmp.substr(tmp.size()-2);
 	if (tmp2 =="/1"  || tmp2 =="/2")
 	{
-		P2In->IDAdd=true;
+		// P2In->IDAdd=true;
 	}
 
 	getline(INFQ,tmp2);
@@ -242,6 +242,7 @@ void RmPCRSE (Para_A24 * P2In, bool * PASSAAA, int & End, vector <string> & AAAS
 			if ( MapIt != localPCR.end() )
 			{
 				PASSAAA[ii]=false;
+
 				PcrReCord[Cat]=true;
 				continue ;
 			}
@@ -255,12 +256,12 @@ void RmPCRSE (Para_A24 * P2In, bool * PASSAAA, int & End, vector <string> & AAAS
 
 void RmPCRPE (Para_A24 * P2In, bool * PASSAAA, bool * PASSBBB, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
 {
-	if ((P2In->PCRA)==2)
+	if ((P2In->PCRA)==1)
 	{
 		RmPCRSE ( P2In, PASSAAA, End, AAASSS);
 		RmPCRSE ( P2In, PASSBBB, End, BBBSSS);
 	}
-	else if ((P2In->PCRA)==1)
+	else if ((P2In->PCRA)==2)
 	{
 		string  Cat ;
 		unordered_map <string, bool > :: iterator  MapIt;
@@ -298,12 +299,12 @@ void RmPCRPE (Para_A24 * P2In, bool * PASSAAA, bool * PASSBBB, int & End,vector 
 
 void RmPCRPE( Para_A24 * P2In ,bool  * PASS, int & End,vector <string> & AAASSS,vector <string> & BBBSSS )
 {
-	if ((P2In->PCRA)==2)
+	if ((P2In->PCRA)==1)
 	{
 		RmPCRSE ( P2In, PASS, End, AAASSS);
 		RmPCRSE ( P2In, PASS, End, BBBSSS);
 	}
-	else if ((P2In->PCRA)==1)
+	else if ((P2In->PCRA)==2)
 	{
 		string  Cat ;
 		unordered_map <string, bool > :: iterator  MapIt;

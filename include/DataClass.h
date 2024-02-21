@@ -36,8 +36,8 @@
 #include <map>
 #include <cstdio>
 #include <zlib.h>
-#include "./gzstream.c"
-#include "./kseq.h"
+#include "gzstream.c"
+#include "kseq.h"
 //
 typedef  long long LLongA;
 
@@ -45,8 +45,10 @@ using namespace std;
 
 bool NArry[256]={false};
 bool LowArry[256]={true};
-int  n_thread=4;
-int  VECMAX =1024*10000;
+int n_thread=1;
+int VECMAX =1024*1024;
+int BinWind = VECMAX;
+int	BATCH_SIZE = BinWind;
 
 struct OUTIOGZ
 {
@@ -73,13 +75,7 @@ struct OUTIO
 //
 class Para_A24 {
 	public:
-		string InFq1;
-		string InFq2;
-		string OutFq1;
-		string InSeFq ;
-
 		int LowQint ;
-		unsigned long ReadNumber;
 		int AverQ;
 		int MinBaseQ;
 		int Kmer;
@@ -87,24 +83,27 @@ class Para_A24 {
 		int MinCount;
 		int ReadLength;
 		int HalfReadLength;
-		bool OUTGZ ;
 		int PCRA;
+		bool OUTGZ ;
 		bool FILTER;
 		bool OutFa;
 		int N_Number;
-		double  N_Ration;
 		int MinReadKmerCount;
-		bool IDAdd;
 		bool KmerStatOut;
+		unsigned long ReadNumber;
+		double  N_Ration;
+
+		string InFq1;
+		string InFq2;
+		string OutFq1;
+		string InSeFq ;
+
 
 		Para_A24()
 		{
-			InFq1="";
-			InFq2="";
-			OutFq1="";
-			InSeFq="" ;
 			LowQint=64;
 			MinBaseQ=0;
+			FILTER=true;
 			AverQ=20;
 			Kmer=31;
 			Windows=5;
@@ -118,9 +117,11 @@ class Para_A24 {
 			OUTGZ=false;
 			OutFa=true;
 			MinReadKmerCount=5;
-			IDAdd=false;
 			KmerStatOut=false;
-			FILTER=true;
+			InFq1="";
+			InFq2="";
+			OutFq1="";
+			InSeFq="" ;
 		}
 };
 
