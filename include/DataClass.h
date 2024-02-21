@@ -48,7 +48,7 @@ bool LowArry[256]={true};
 int n_thread=1;
 int VECMAX =1024*1024;
 int BinWind = VECMAX;
-int	BATCH_SIZE = BinWind;
+int BATCH_SIZE = BinWind;
 
 struct OUTIOGZ
 {
