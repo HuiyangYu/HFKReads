@@ -828,7 +828,7 @@ int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	return 0;
 }
 
-int RunFAFilterSE (Para_A24 * P2In,  vector<std::string>  & FilePath)
+int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
 {
 
 	std::ios::sync_with_stdio(false);
@@ -2198,7 +2198,7 @@ int main (int argc, char *argv[ ])
 
 	if ((InPESE==1) && ((P2In->LowQint)!=0)){ // PE FQ
 		P2In->ReadNumber=(P2In->ReadNumber)/2;
-		Run_PE_FQ_Filter(P2In,FilePath);
+		Run_PE_fq_filter(P2In,FilePath);
 	}
 	else if ((InPESE==2) && ((P2In->LowQint)!=0)){  // SE FQ
 		Run_SE_fq_filter(P2In,FilePath);
@@ -2208,7 +2208,7 @@ int main (int argc, char *argv[ ])
 		Run_PE_fa_filter(P2In,FilePath);
 	}
 	else if ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
-		RunFAFilterSE(P2In,FilePath);
+		Run_PE_fa_filter(P2In,FilePath);
 	}
 
 	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
@@ -2254,7 +2254,7 @@ int main (int argc, char *argv[ ])
 	for (int i = 0; i < 1<<p; ++i) {
 		kc_c4_destroy(h->h[i]);
 	}
-	
+
 	free(h->h); free(h);
 
 	delete P2In ;
