@@ -828,7 +828,7 @@ int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
 	return 0;
 }
 
-int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
+int Run_SE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
 {
 
 	std::ios::sync_with_stdio(false);
@@ -2208,7 +2208,7 @@ int main (int argc, char *argv[ ])
 		Run_PE_fa_filter(P2In,FilePath);
 	}
 	else if ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
-		Run_PE_fa_filter(P2In,FilePath);
+		Run_SE_fa_filter(P2In,FilePath);
 	}
 
 	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
