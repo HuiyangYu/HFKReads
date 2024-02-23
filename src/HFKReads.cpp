@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <malloc.h>
 #include <atomic>
-#include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <cstdio>
 #include <vector>
@@ -67,7 +67,7 @@ int n_thread=1;
 int VECMAX =1024*100;
 int BinWind = VECMAX;
 int BATCH_SIZE = BinWind;
-unordered_map <string, bool > PcrReCord;
+unordered_set<string> seen_seqs;
 
 class Para_A24 {
 	public:
@@ -444,30 +444,19 @@ void Filter_PE_low_qual_reads(Para_A24 * P2In, bool * PASS, int & Start, int & E
 	}
 }
 
-void RmPCR_PE( Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SEQ,vector <string> & PE2_SEQ)
-{	
-	if(P2In->Dedup){
-		string  Cat ;
-		unordered_map <string, bool > :: iterator MapIt;
-		unordered_map <string, bool > localPCR;
 
-		for (int ii=0; ii<End; ii++) {
-			if(PASS[ii]) {
-				Cat= PE1_SEQ[ii]+PE2_SEQ[ii];
-				MapIt=PcrReCord.find(Cat);
-				if (MapIt != PcrReCord.end()) {
-					PASS[ii]=false;
-					continue ;
-				}
+void RmPCR_PE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SEQ, vector <string> & PE2_SEQ)
+{
+	if (P2In->Dedup) {
+		string Cat;
 
-				MapIt=localPCR.find(Cat);
-				if (MapIt != localPCR.end()) {
-					PASS[ii]=false;
-					PcrReCord[Cat]=true;
-					continue ;
-				}
-				else {
-					localPCR[Cat]=true;
+		for (int ii = 0; ii < End; ii++) {
+			if (PASS[ii]) {
+				Cat = PE1_SEQ[ii] + PE2_SEQ[ii];
+				if (seen_seqs.find(Cat) != seen_seqs.end()) {
+					PASS[ii] = false;
+				} else {
+					seen_seqs.insert(Cat);
 				}
 			}
 		}
@@ -476,31 +465,17 @@ void RmPCR_PE( Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SE
 
 void RmPCR_SE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & SEQ)
 {
-	if(P2In->Dedup){
-		string  Cat ;
-		unordered_map <string, bool > :: iterator MapIt;
-		unordered_map <string, bool > localPCR;
-
-		for (int ii=0; ii<End; ii++) {
-			if(PASS[ii]) {
-				Cat= SEQ[ii];
-				MapIt=PcrReCord.find(Cat);
-				if ( MapIt != PcrReCord.end()) {
-					PASS[ii]=false;
-					continue ;
-				}
-
-				MapIt=localPCR.find(Cat);
-				if (MapIt != localPCR.end()) {
-					PASS[ii]=false;
-					PcrReCord[Cat]=true;
-					continue ;
-				} else {
-					localPCR[Cat]=true;
-				}
-			}
-		}
-	}
+    if(P2In->Dedup){
+        for (int ii=0; ii<End; ii++) {
+            if (PASS[ii]) {
+                if (seen_seqs.find(SEQ[ii]) != seen_seqs.end()) {
+                    PASS[ii] = false;
+                } else {
+                    seen_seqs.insert(SEQ[ii]);
+                }
+            }
+        }
+    }
 }
 
 int Out_SE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH, bool *PASS, vector <string> &ID, vector <string> &SEQ, vector <string> &QUAL){
