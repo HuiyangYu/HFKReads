@@ -10,9 +10,8 @@
 #include "./kthread.h" // multi-threading models: pipeline and multi-threaded for loop
 #include "./kthread.c" // multi-threading models: pipeline and multi-threaded for loop
 #include "./kseq.h" // FASTA/Q parser
-#include "./comm.hpp"
+KSEQ_INIT(gzFile, gzread)
 
-//KSEQ_INIT(gzFile, gzread)
 using namespace std;
 
 #define KC_BITS 10
