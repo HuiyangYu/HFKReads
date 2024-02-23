@@ -19,11 +19,11 @@ cd bin
 ```
 ## 2. Usage
 ```
-Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutFrefix
+Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix
  Input/Output options:
    -1	<str>   paired-end fasta/q file1
    -2	<str>   paired-end fasta/q file2
-   -s	<str>   single-end fasta/q
+   -s	<str>   single-end fasta/q file
    -o	<str>   prefix of output file
  Filter options:
    -b	<int>   min base quality [0]
@@ -31,18 +31,18 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutFrefix
    -l	<int>   min length of read [half]
    -r	<float> max unknown base (N) ratio [0.1]
    -k	<int>   kmer length [31]
-   -w	<int>   window size [5]
-   -m	<int>   min kmer count for high freq kmer [3] 
-   -x	<int>   min count of read with high freq kmer [5]
+   -w	<int>   window size [10]
+   -m	<int>   min kmer count for high frequency kmer [3] 
+   -x	<int>   min count of read with high frequency kmer [5]
    -n	<int>   read number to use [1000000]
-   -a	        use all the read number
+   -a	        use all the read
  Other options:
-   -d  <int>    mode for deduplication (0:NO, 1:PE, 2:SE) [0]
-   -c           compress the outPut File
-   -f           outPut the KmerFre File
-   -A           keep output quality info
-   -t           thread to run [4]
-   -h           show help [v2.02]
+   -d           drop the duplicated reads/pairs
+   -f           output the kmer frequency file
+   -A           keep base quality in output
+   -c           compress the output File
+   -t           number of threads [1]
+   -h           show help [v2.03]
 ```
 ## 3. Example
 ### 3.1 Extracting high-frequency k-mer reads from paired-end sequencing reads
