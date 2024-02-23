@@ -21,15 +21,13 @@
 #include <cstdio>
 #include <vector>
 #include <zlib.h>
-#include "gzstream.c"
 #include "kseq.h"
-#include "comm.hpp"
-#include "M1_work.hpp"
 #include "kc-c4-window.c"
 
 typedef  long long LLongA;
 
 using namespace std;
+
 //KSEQ_INIT(gzFile, gzread)
 
 int  print_usage_FqSplit() {
@@ -46,22 +44,97 @@ int  print_usage_FqSplit() {
 		"   -l	<int>   min length of read [half]\n"
 		"   -r	<float> max unknown base (N) ratio [0.1]\n"
 		"   -k	<int>   kmer length [31]\n"
-		"   -w	<int>   window size [5]\n"
+		"   -w	<int>   window size [10]\n"
 		"   -m	<int>   min kmer count for high frequency kmer [3] \n"
 		"   -x	<int>   min count of read with high frequency kmer [5]\n"
 		"   -n	<int>   read number to use [1000000]\n"
 		"   -a	        use all the read\n"
 		" Other options:\n"
-		"   -d  <int>    mode for de-duplication (0:NO, 1:SE, 1:PE) [0]\n"
+		"   -d           drop the duplicated reads/pairs\n"
 		"   -f           output the kmer frequency file\n"
 		"   -A           keep base quality in output\n"
 		"   -c           compress the output File\n"
 		"   -t           number of threads [1]\n"
-		"   -h           show help [v2.02]\n"
+		"   -h           show help [v2.03]\n"
 		"\n";
 	return 1;
 }
 //
+
+bool NArry[256]={false};
+bool LowArry[256]={true};
+int n_thread=1;
+int VECMAX =1024*100;
+int BinWind = VECMAX;
+int BATCH_SIZE = BinWind;
+unordered_map <string, bool > PcrReCord;
+
+class Para_A24 {
+	public:
+		int MaxQV;
+		int AverQ;
+		int MinBaseQ;
+		int Kmer;
+		int Windows;
+		int MinCount;
+		int ReadLength;
+		int MinLen;
+		bool Dedup;
+		bool OUTGZ ;
+		bool FILTER_LQ;
+		bool OutFa;
+		int N_Number;
+		int MinReadKmerCount;
+		bool KmerStatOut;
+		unsigned long ReadNumber;
+		double  N_Ration;
+
+		string InFq1;
+		string InFq2;
+		string InSeFq ;
+		string OutPrefix;
+		
+		Para_A24() {
+			MaxQV=64;
+			MinBaseQ=0;
+			AverQ=20;
+			Kmer=31;
+			Windows=10;
+			MinCount=3;
+			N_Number=2;
+			N_Ration=0.1;
+			ReadNumber=1000000;
+			ReadLength=0;
+			MinLen=0;
+			Dedup=false;
+			OUTGZ=false;
+			OutFa=true;
+			FILTER_LQ=true;
+			MinReadKmerCount=5;
+			KmerStatOut=false;
+			InFq1="";
+			InFq2="";
+			InSeFq="" ;
+			OutPrefix="";
+		}
+};
+
+inline void  LogLackArg(string flag) {
+	cerr << "Error: Lack Argument for [ -"<<flag<<" ]"<<endl;
+}
+
+string & replace_all(string & str, const string & pattern, const string & replacement) {
+	while(true) {
+		string::size_type  pos(0);
+		if((pos=str.find(pattern))!=string::npos){
+			str.replace(pos,pattern.length(),replacement);
+		} else{
+			break;
+		}
+	}
+	return str;
+}
+
 int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 	if (argc <=3) {print_usage_FqSplit();return 0;}
 
@@ -94,7 +167,7 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 		else if (flag == "o" ) {
 			if(i + 1 == argc) {LogLackArg( flag ) ; return 0;}
 			i++;
-			P2In->OutFq1=argv[i];
+			P2In->OutPrefix=argv[i];
 		}
 
 		//Filter low quality
@@ -111,9 +184,9 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 		else if (flag == "l") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
-			P2In->HalfReadLength=atoi(argv[i]);
-			if ((P2In->HalfReadLength)<11) {
-				P2In->HalfReadLength=11;
+			P2In->MinLen=atoi(argv[i]);
+			if ((P2In->MinLen)<11) {
+				P2In->MinLen=11;
 				cerr<<"Warings: -l should >= 11, we set it to 11\n";
 			}
 		}
@@ -168,13 +241,7 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 
 		//other options
 		else if (flag  == "d") {
-			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
-			i++;			
-			P2In->PCRA=atoi(argv[i]);
-			if ((P2In->PCRA)>2 ||  (P2In->PCRA)<0) {
-				cerr<<"Warning: -d should be (0,1,2), we modify it to be 1\n ";
-				P2In->PCRA=1;
-			}
+			P2In->Dedup=true;
 		}
 		else if (flag  == "c") {
 			P2In->OUTGZ=true;
@@ -205,7 +272,7 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 			return 0;
 		}
 	}
-
+	//check file type; 0 for unknow; 1 for PE; 2 for SE 
 	if ((P2In->InSeFq).empty()){
 		if ((P2In->InFq1).empty() || (P2In->InFq2).empty()){
 			cerr<< "Error: PE reads should input together"<<endl;
@@ -230,742 +297,562 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 				cerr<<"Error: can't find this file -s "<<(P2In->InSeFq)<<endl;
 				return 0 ;
 			}else{
-				return 1;
+				return 2;
 			}
 		}
 	}
 }
 
-int Run_PE_fq_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
+int Get_qType(string FilePath, Para_A24 * P2In){
 
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
+	gzFile fp;
+  	kseq_t *seq;
+  	int len;
 
-	vector <string>  AAAIII;
-	vector <string>  AAASSS;
-	vector <string>  AAAQQQ;
+	fp = gzopen((FilePath).c_str(), "r");
+  	seq = kseq_init(fp);
+
+	int seqNum=0;
+	int maxSeq=5000;
+	int minQ=50000;
+	int maxQ=0;
+	int Lengths[maxSeq];
+	string qual;
+	for (int A=0 ; A<(maxSeq) && ((len = kseq_read(seq)) >= 0); A++){
+		Lengths[seqNum]=(seq->seq.l);
+		seqNum++;
+		qual=seq->qual.s;
+		for (int i=0; i<(seq->qual.l); i++) {
+			if(minQ>qual[i]) {
+				minQ=qual[i];
+			}
+			if(maxQ<qual[i]) {
+				maxQ=qual[i];
+			}
+		}
+	}
+	kseq_destroy(seq);
+  	gzclose(fp);
+
+	sort(Lengths, Lengths + maxSeq);
+	int middleIndex = maxSeq / 2;
+	P2In->ReadLength = Lengths[middleIndex];
+	P2In->N_Number=int((P2In->ReadLength)*(P2In->N_Ration));
+
+	if ((P2In->MinLen) < ((P2In->Kmer)+1)) {
+		P2In->MinLen=(P2In->ReadLength)/2;
+		if ((P2In->MinLen)<((P2In->Kmer)+1)){
+			(P2In->MinLen)=(P2In->Kmer)+1;
+		}
+	}
 	
-	vector <string>  BBBIII ;
-	vector <string>  BBBSSS ;
-	vector <string>  BBBQQQ ;
-	
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAQQQ.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
-
-	BBBSSS.resize(BATCH_SIZE+2);
-	BBBQQQ.resize(BATCH_SIZE+2);
-	BBBIII.resize(BATCH_SIZE+2);
-
-	int A=0;
-
-	std::vector<std::thread> threads;
-
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
-
-	bool  *PASS =new bool [BATCH_SIZE];
-
-	igzstream INA ((P2In->InFq1).c_str(),ifstream::in);
-	igzstream INB ((P2In->InFq2).c_str(),ifstream::in);
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-	INB.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-	string ID_1 ,seq_1,temp_1,Quly_1 ;
-	string ID_2 ,seq_2,temp_2,Quly_2 ;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+"_APE_tmp.fa";
-	string outputFileBPE=OUT+"_BPE_tmp.fa";
-	if (!P2In->OutFa)
-	{
-		outputFileAPE=OUT+"_APE_tmp.fq";
-		outputFileBPE=OUT+"_BPE_tmp.fq";
-	}
-	FilePath.push_back(outputFileAPE);
-	FilePath.push_back(outputFileBPE);
-
-	OUTIO OUTHanDle ;
-	OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-	OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-	int CountFQ=0;
-
-	if (P2In->OutFa)
-	{
-
-		for (A=0 ; A<(P2In->ReadNumber) && (!INA.eof()) ; A++)
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-			getline(INB,temp_2);
-			getline(INB,Quly_2);
-
-			if (ID_1.empty()) {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBQQQ[CountFQ]=Quly_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS[j])
-					{						
-						AAAIII[j][0]='>';
-						BBBIII[j][0]='>';
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-					}
-				}
-				CountFQ=0;
-			}
+	int qType=0;
+	if (maxQ>0){
+		if(minQ >= 33 &&  minQ <= 78  &&  maxQ >= 33 && maxQ <= 78) {
+			qType=33;
 		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
-			}
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{
-					AAAIII[j][0]='>';
-					BBBIII[j][0]='>';
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-				}
-			}
-			CountFQ=0;
+		else if (minQ >= 64  &&  minQ <= 108  &&  maxQ >= 64 && maxQ <= 108){
+			qType=64;
 		}
-	}
-	else
-	{
-		for (A=0 ; A<(P2In->ReadNumber) && (!INA.eof()) ; A++)
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-			getline(INB,temp_2);
-			getline(INB,Quly_2);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBQQQ[CountFQ]=Quly_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS[j])
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-					}
-				}
-				CountFQ=0;
-			}
+		else if (minQ < 55) {
+			qType=33;
 		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFQPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ),std::ref(BBBSSS),std::ref(BBBQQQ)));
-			}
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-				}
-			}
-			CountFQ=0;
+		else {
+			qType=64;
 		}
-
+		P2In->AverQ=(P2In->AverQ)+qType;
+		P2In->MinBaseQ=(P2In->MinBaseQ)+qType;
 	}
 
-	OUTHanDle.OUTAPE.close();
-	OUTHanDle.OUTBPE.close();
-
-	if (!INA.eof()) {  getline(INA,ID_1); if (INA.eof()) { A++;} }
-	if (INA.eof()) {A--;	cout<<"INFO: ALL reads "<<A*2<<" are read done"<<endl;	}
-
-	INA.close();
-	INB.close();
-	delete [] Start ;
-	delete [] End;
-	delete [] PASS;
-
-	return 0;
+	return maxQ;
 }
 
-int Run_SE_fq_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
+inline bool Filter_fq_reads(Para_A24 * P2In, string & seq, string & qual){
+	int sumQ=0;
+	bool Low=true;
+	int NN=0;
+	int read_length=seq.length();
 
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
-
-	vector <string>  AAASSS ;
-	vector <string>  AAAQQQ ;
-	vector <string>  AAAIII ;
-
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAQQQ.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
-
-	int A=0;
-
-	std::vector<std::thread> threads;
-
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
-
-	bool  *PASS =new bool [BATCH_SIZE];
-
-	igzstream INA ((P2In->InFq1).c_str(),ifstream::in);
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-	string ID_1 ,seq_1,temp_1,Quly_1 ;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+"_SE_tmp.fa";
-	if (!P2In->OutFa)
-	{
-		outputFileAPE=OUT+"_SE_tmp.fq";
-	}
-	FilePath.push_back(outputFileAPE);
-
-	OUTIO OUTHanDle ;
-	OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-
-	int CountFQ=0;
-
-	if (P2In->OutFa)
-	{
-		for (A=0 ; A<(P2In->ReadNumber) && (!INA.eof()) ; A++)
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRSE(P2In,PASS,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS[j])
-					{						
-						AAAIII[j][0]='>';
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
-			}
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{
-					AAAIII[j][0]='>';
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-				}
-			}
-			CountFQ=0;
-		}
-	}
-	else
-	{
-		for (A=0 ; A<(P2In->ReadNumber) && (!INA.eof()) ; A++)
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRSE(P2In,PASS,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS[j])
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFQSE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(AAAQQQ)));
-			}
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-				}
-			}
-			CountFQ=0;
-		}
+	if (read_length< (P2In->MinLen)) {
+		return false;
 	}
 
-	OUTHanDle.OUTAPE.close();
+	for(int ix=0 ; ix<read_length ; ix++){
+		NN+=NArry[seq[ix]] ;	
+		Low=Low & LowArry[qual[ix]];
+		sumQ+=qual[ix];
+	}
 
-	if (!INA.eof()) {  getline(INA,ID_1); if (INA.eof()) { A++;} }
-	if (INA.eof()) {A--;	cout<<"INFO: ALL reads "<<A<<" are read done"<<endl;	}
+	if (NN>(P2In->N_Number)) {
+		return false;
+	}
+	if (!Low) {
+		return false;
+	}
 
-	INA.close();
-	delete [] Start ;
-	delete [] End;
-	delete [] PASS;
-	return 0;
+	if ((sumQ/read_length) < (P2In->AverQ)) {
+		return false;
+	}
+
+	return true;
 }
 
-int Run_PE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
+inline bool Filter_fa_reads(Para_A24 * P2In, string & seq) {
+	int NN=0;
+	int read_length=seq.length();
+	if (read_length< (P2In->MinLen)) {return false;}
+	for(int ix=0; ix<read_length ; ix++) {
+		NN+=NArry[seq[ix]];	
+	}
+	if (NN>(P2In->N_Number)) {return false ;}
+	return true ;
+}
+
+void Filter_SE_low_qual_reads(Para_A24 * P2In, bool * PASS, int & Start, int & End, 
+							  vector <string> & SEQ, vector <string> & QUAL){
+	if(QUAL[0].length()<=2){
+		for (int i=Start; i<End; i++){
+			PASS[i]=Filter_fa_reads(P2In, SEQ[i]);
+		}
+	} else {
+		for (int i=Start; i<End; i++){
+			PASS[i]=Filter_fq_reads(P2In, SEQ[i], QUAL[i]);
+		}
+	}
+
+}
+
+void Filter_PE_low_qual_reads(Para_A24 * P2In, bool * PASS, int & Start, int & End, 
+							  vector <string> & PE1_SEQ, vector <string> & PE1_QUAL,
+							  vector <string> & PE2_SEQ, vector <string> & PE2_QUAL){
+	if(PE1_QUAL[0].length()<=2){
+		for (int i=Start; i<End; i++){
+			if (Filter_fa_reads(P2In, PE1_SEQ[i]) && Filter_fa_reads(P2In, PE2_SEQ[i])){
+				PASS[i]=true;
+			} else{
+				PASS[i]=false;
+			}
+		}
+	} else {
+		for (int i=Start; i<End; i++){
+			if(Filter_fq_reads(P2In, PE1_SEQ[i], PE1_QUAL[i]) && Filter_fq_reads(P2In, PE2_SEQ[i], PE2_QUAL[i])){
+				PASS[i]=true;
+			} else{
+				PASS[i]=false;
+			}
+		}
+	}
+}
+
+void RmPCR_PE( Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SEQ,vector <string> & PE2_SEQ)
+{	
+	if(P2In->Dedup){
+		string  Cat ;
+		unordered_map <string, bool > :: iterator MapIt;
+		unordered_map <string, bool > localPCR;
+
+		for (int ii=0; ii<End; ii++) {
+			if(PASS[ii]) {
+				Cat= PE1_SEQ[ii]+PE2_SEQ[ii];
+				MapIt=PcrReCord.find(Cat);
+				if (MapIt != PcrReCord.end()) {
+					PASS[ii]=false;
+					continue ;
+				}
+
+				MapIt=localPCR.find(Cat);
+				if (MapIt != localPCR.end()) {
+					PASS[ii]=false;
+					PcrReCord[Cat]=true;
+					continue ;
+				}
+				else {
+					localPCR[Cat]=true;
+				}
+			}
+		}
+	}
+}
+
+void RmPCR_SE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & SEQ)
 {
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
+	if(P2In->Dedup){
+		string  Cat ;
+		unordered_map <string, bool > :: iterator MapIt;
+		unordered_map <string, bool > localPCR;
 
-	vector <string>  AAASSS ;
-	vector <string>  AAAIII ;
+		for (int ii=0; ii<End; ii++) {
+			if(PASS[ii]) {
+				Cat= SEQ[ii];
+				MapIt=PcrReCord.find(Cat);
+				if ( MapIt != PcrReCord.end()) {
+					PASS[ii]=false;
+					continue ;
+				}
 
-	vector <string>  BBBSSS ;
-	vector <string>  BBBIII ;
+				MapIt=localPCR.find(Cat);
+				if (MapIt != localPCR.end()) {
+					PASS[ii]=false;
+					PcrReCord[Cat]=true;
+					continue ;
+				} else {
+					localPCR[Cat]=true;
+				}
+			}
+		}
+	}
+}
 
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
+int Out_SE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH, bool *PASS, vector <string> &ID, vector <string> &SEQ, vector <string> &QUAL){
+	int out_number=0;
+	if (P2In->OutFa){
+		for (int j = 0; j < seq_num; j++) {
+			if (PASS[j]) {						
+				ID[j][0]='>';
+				OUTH << ID[j]<<"\n"<<SEQ[j]<<"\n";
+				out_number++;
+			}
+		}
+	} else {
+		for (int j = 0; j < seq_num; j++) {
+			if (PASS[j]) {
+				OUTH<< ID[j]<<"\n"<<SEQ[j]<<"\n+\n"<<QUAL[j]<<"\n";
+				out_number++;
+			}
+		}
+	}
+	return out_number;
+}
 
-	BBBSSS.resize(BATCH_SIZE+2);
-	BBBIII.resize(BATCH_SIZE+2);
+vector<int> Out_PE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH_PE1, ofstream &OUTH_PE2,
+			  ofstream &OUTH_SE1, ofstream &OUTH_SE2, bool *PASS_PE1, bool *PASS_PE2,
+			  vector <string> &PE1_ID, vector <string> &PE1_SEQ, vector <string> &PE1_QUAL,
+			  vector <string> &PE2_ID, vector <string> &PE2_SEQ, vector <string> &PE2_QUAL){
+	int pe_number=0;
+	int se_number=0;
+	if (P2In->OutFa){
+		for (int j = 0; j < seq_num; j++) {
+			if (PASS_PE1[j] && PASS_PE2[j]) {						
+				PE1_ID[j][0]='>';
+				PE2_ID[j][0]='>';
+				OUTH_PE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				OUTH_PE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+				pe_number++;
+			} else if(PASS_PE1[j]){
+				PE1_ID[j][0]='>';
+				OUTH_SE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				se_number++;
+			} else if(PASS_PE2[j]){
+				PE2_ID[j][0]='>';
+				OUTH_SE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+			}
+		}
+	} else {
+		for (int j = 0; j < seq_num; j++) {
+			if (PASS_PE1[j] && PASS_PE2[j]) {
+				OUTH_PE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				OUTH_PE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+				pe_number++;
+			}else if(PASS_PE1[j]){
+				OUTH_SE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				se_number++;
+			}else if(PASS_PE2[j]){
+				OUTH_SE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+			}
+		}
+	}
+	vector<int> out_number = {pe_number, se_number};
+	return out_number;
+}
 
+int Run_PE_low_qual_batch(Para_A24 * P2In, int &seq_num, ofstream &OUTH_PE1, ofstream &OUTH_PE2,
+				vector <string> &PE1_ID, vector <string> &PE1_SEQ, vector <string> &PE1_QUAL,
+				vector <string> &PE2_ID, vector <string> &PE2_SEQ, vector <string> &PE2_QUAL){
+	
 	std::vector<std::thread> threads;
-
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
 	bool  *PASS =new bool [BATCH_SIZE];
 
-	gzFile fpAA;
-	kseq_t *seqAA;
+	for (int i = 0; i < n_thread; i++){
+		Start[i]=i*BinWind;
+		End[i]=Start[i]+BinWind;
+		if (End[i]>seq_num) {End[i]=seq_num;} if (Start[i]>=End[i]) {continue;}
+		threads.push_back(thread(Filter_PE_low_qual_reads,P2In,PASS,ref(Start[i]),ref(End[i]),
+						         ref(PE1_SEQ),ref(PE1_QUAL),ref(PE2_SEQ),ref(PE2_QUAL)));
+	}
 
-	gzFile fpBB;
-	kseq_t *seqBB;
+	for (auto& thread : threads) {
+		thread.join();
+	}
 
-	fpAA = gzopen((P2In->InFq1).c_str(), "r");
-	seqAA = kseq_init(fpAA);
+	threads.clear();
+	RmPCR_PE(P2In,PASS,seq_num,PE1_SEQ,PE2_SEQ);
+	int out_number=Out_SE_seq(P2In,seq_num,OUTH_PE1,PASS,PE1_ID,PE1_SEQ,PE1_QUAL);
+	Out_SE_seq(P2In,seq_num,OUTH_PE2,PASS,PE2_ID,PE2_SEQ,PE2_QUAL);
 
-	fpBB = gzopen((P2In->InFq2).c_str(), "r");
-	seqBB = kseq_init(fpBB);
+	delete [] Start;
+	delete [] End;
+	delete [] PASS;
 
-	int AA ; int A=0;
-	string ID_1,ID_2;
-	string seqStrAA,seqStrBB;
+	return out_number;
+}
 
-	string OUT=(P2In->OutFq1);
+int Run_SE_low_qual_batch(Para_A24 * P2In, int &seq_num, ofstream &OUTH_SE, 
+				vector <string> &SE_ID, vector <string> &SE_SEQ, vector <string> &SE_QUAL){
+	
+	std::vector<std::thread> threads;
+	int * Start =new int [n_thread];
+	int * End =new int [n_thread];
+	bool  *PASS =new bool [BATCH_SIZE];
 
-	string outputFileAPE=OUT+"_APE_tmp.fa";
-	string outputFileBPE=OUT+"_BPE_tmp.fa";
+	for (int i = 0; i < n_thread; i++){
+		Start[i]=i*BinWind;
+		End[i]=Start[i]+BinWind;
+		if (End[i]>seq_num) {End[i]=seq_num;} if (Start[i]>=End[i]) {continue;}
+		threads.push_back(thread(Filter_SE_low_qual_reads,P2In,PASS,
+								 ref(Start[i]),ref(End[i]), ref(SE_SEQ),ref(SE_QUAL)));
+	}
 
-	FilePath.push_back(outputFileAPE);
-	FilePath.push_back(outputFileBPE);
+	for (auto& thread : threads) {
+		thread.join();
+	}
 
-	OUTIO OUTHanDle ;
-	OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-	OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-	int CountFQ=0;
+	threads.clear();
 
-	for (A=0 ; A<(P2In->ReadNumber) && ( (AA = kseq_read(seqAA)) >= 0)  ; A++)
-	{
-		ID_1=(seqAA->name.s);
-		seqStrAA=(seqAA->seq.s);
+	RmPCR_SE(P2In, PASS, seq_num, SE_SEQ);
+	int out_number=Out_SE_seq(P2In,seq_num,OUTH_SE,PASS,SE_ID,SE_SEQ,SE_QUAL);
 
-		AAASSS[CountFQ]=seqStrAA;
-		AAAIII[CountFQ]=ID_1;
-		AA = kseq_read(seqBB);
+	delete [] Start;
+	delete [] End;
+	delete [] PASS;
 
-		ID_2=(seqBB->name.s);
-		seqStrBB=(seqBB->seq.s);
-		BBBSSS[CountFQ]=seqStrBB;
-		BBBIII[CountFQ]=ID_2;
-		CountFQ++;
+	return out_number;
+}
 
-		if (CountFQ==BATCH_SIZE)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFAPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-			}
+int Run_PE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
+	std::ios::sync_with_stdio(false);
+	std::cin.tie(0);
 
-			threads.clear();
-			RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
+	vector <string>  PE1_ID;
+	vector <string>  PE1_SEQ;
+	vector <string>  PE1_QUAL;
+	
+	vector <string>  PE2_ID ;
+	vector <string>  PE2_SEQ ;
+	vector <string>  PE2_QUAL ;
 
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{						
-					AAAIII[j][0]='>';
-					BBBIII[j][0]='>';
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-				}
-			}
-			CountFQ=0;
+	PE1_ID.resize(BATCH_SIZE+2);
+	PE1_SEQ.resize(BATCH_SIZE+2);
+	PE1_QUAL.resize(BATCH_SIZE+2);
+	
+	PE2_ID.resize(BATCH_SIZE+2);
+	PE2_SEQ.resize(BATCH_SIZE+2);
+	PE2_QUAL.resize(BATCH_SIZE+2);
+
+	int len_pe1;
+	int len_pe2;
+
+	gzFile fp_pe1;
+	kseq_t *seq_pe1;
+
+	gzFile fp_pe2;
+	kseq_t *seq_pe2;
+
+	fp_pe1 = gzopen((P2In->InFq1).c_str(), "r");
+	seq_pe1 = kseq_init(fp_pe1);
+
+	fp_pe2 = gzopen((P2In->InFq2).c_str(), "r");
+	seq_pe2 = kseq_init(fp_pe2);
+
+	string id_1, seq_1, plus_1, qual_1 ;
+	string id_2, seq_2, plus_2, qual_2 ;
+
+	string OUT=(P2In->OutPrefix);
+
+	string outname_pe1=OUT+"_pe_1_tmp.fa";
+	string outname_pe2=OUT+"_pe_2_tmp.fa";
+
+	if ((P2In->MinCount)==1){
+		outname_pe1=OUT+"_pe_1.fa";
+		outname_pe2=OUT+"_pe_2.fa";
+	}
+
+	if (!P2In->OutFa) {
+		if ((P2In->MinCount)==1){
+			outname_pe1=OUT+"_pe_1.fq";
+			outname_pe2=OUT+"_pe_2.fq";
+		}else{
+			outname_pe1=OUT+"_pe_1_tmp.fq";
+			outname_pe2=OUT+"_pe_2_tmp.fq";
 		}
 	}
 
-	if (CountFQ!=0)
-	{
-		for (int i = 0; i < n_thread; i++)
-		{
-			Start[i]=i*BinWind;
-			End[i]=Start[i]+BinWind;
-			if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-			threads.push_back(std::thread(FilterFAPE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-		}
+	FilePath.push_back(outname_pe1);
+	FilePath.push_back(outname_pe2);
 
-		for (auto& thread : threads)
-		{
-			thread.join();
-		}
-		threads.clear();
-		RmPCRPE(P2In,PASS,CountFQ,AAASSS,BBBSSS);
+	int hq_number=0;
 
-		for (int j = 0; j < CountFQ; j++)
-		{
-			if (PASS[j])
-			{
-				AAAIII[j][0]='>';
-				BBBIII[j][0]='>';
-				OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-				OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-			}
+	ofstream OUTH_PE1,OUTH_PE2;
+	OUTH_PE1.open(outname_pe1.c_str());
+	OUTH_PE2.open(outname_pe2.c_str());
+	int seq_num=0;
+	int A=0;
+	for (A=0 ; A<(P2In->ReadNumber) && ((len_pe1 = kseq_read(seq_pe1)) >= 0) && 
+										((len_pe2 = kseq_read(seq_pe2)) >= 0); A++){
+		PE1_ID[seq_num]=seq_pe1->name.s;
+		PE1_SEQ[seq_num]=seq_pe1->seq.s;
+		PE1_QUAL[seq_num]=seq_pe1->qual.s;
+		
+		PE2_ID[seq_num]=seq_pe2->name.s;
+		PE2_SEQ[seq_num]=seq_pe2->seq.s;
+		PE2_QUAL[seq_num]=seq_pe2->qual.s;
+
+		seq_num++;
+		if (seq_num==BATCH_SIZE) {
+			int out_number=Run_PE_low_qual_batch(P2In, seq_num, OUTH_PE1, OUTH_PE2, 
+									PE1_ID, PE1_SEQ, PE1_QUAL,
+									PE2_ID, PE2_SEQ, PE2_QUAL);
+			hq_number+=out_number;
+			seq_num=0;
 		}
-		CountFQ=0;
 	}
 
-	OUTHanDle.OUTAPE.close();
-	OUTHanDle.OUTBPE.close();
+	//filter the remaining sequence and output
+	if (seq_num!=0) {
+		int out_number=Run_PE_low_qual_batch(P2In, seq_num, OUTH_PE1, OUTH_PE2, 
+								PE1_ID, PE1_SEQ, PE1_QUAL,
+								PE2_ID, PE2_SEQ, PE2_QUAL);
+		hq_number+=out_number;
+		seq_num=0;
+	}
 
-	if  (A==(P2In->ReadNumber) )
-	{
-		if  ((AA = kseq_read(seqAA)) >= 0) {  }
-		else
-		{
+	OUTH_PE1.close();
+	OUTH_PE2.close();
+
+	if (A==(P2In->ReadNumber)){
+		if  (!((len_pe1 = kseq_read(seq_pe1)) >= 0)) {
 			cout<<"INFO: ALL reads "<<A*2<<" are read done"<<endl;
 		}
-	}
-	else
-	{
+	} else {
 		cout<<"INFO: ALL reads "<<A*2<<" are read done"<<endl;
 	}
 
-	kseq_destroy(seqAA);
-	gzclose(fpAA);
+	if ((P2In->MinCount)==1){
+		cout<<"INFO: output PE1 read number is "<<hq_number<<"\n";
+		cout<<"INFO: output PE2 read number is "<<hq_number<<"\n";
+		cout<<"INFO: paired PE1 read number is "<<hq_number<<"\n";
+		cout<<"INFO: paired PE2 read number is "<<hq_number<<"\n";
+	}
 
-	kseq_destroy(seqBB);
-	gzclose(fpBB);
+	kseq_destroy(seq_pe1);
+	gzclose(fp_pe1);
 
-	delete [] Start ;
-	delete [] End;
-	delete [] PASS;
+	kseq_destroy(seq_pe2);
+	gzclose(fp_pe2);
+
+	vector<string>().swap(PE1_ID);
+	vector<string>().swap(PE1_SEQ);
+	vector<string>().swap(PE1_QUAL);
+	vector<string>().swap(PE2_ID);
+	vector<string>().swap(PE2_SEQ);
+	vector<string>().swap(PE2_QUAL);
 
 	return 0;
 }
 
-int Run_SE_fa_filter (Para_A24 * P2In,  vector<std::string>  & FilePath)
-{
+int Run_SE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
 	std::ios::sync_with_stdio(false);
 	std::cin.tie(0);
 
-	vector <string>  AAASSS ;
-	vector <string>  AAAIII ;
+	vector <string>  SE_ID ;
+	vector <string>  SE_SEQ ;
+	vector <string>  SE_QUAL ;
+	
+	SE_ID.resize(BATCH_SIZE+2);
+	SE_SEQ.resize(BATCH_SIZE+2);
+	SE_QUAL.resize(BATCH_SIZE+2);
 
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
+	int len_se;
+	gzFile fp_se;
+	kseq_t *seq_se;
 
-	std::vector<std::thread> threads;
+	fp_se = gzopen((P2In->InFq1).c_str(), "r");
+	seq_se = kseq_init(fp_se);
+	
+	string id, seq, plus, qual;
 
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
+	string OUT=(P2In->OutPrefix);
+	string outname_se=OUT+"_tmp.fa";
 
-	bool  *PASS =new bool [BATCH_SIZE];
+	if ((P2In->MinCount)==1){
+		outname_se=OUT+".fa";
+	}
 
-	gzFile fpAA;
-	kseq_t *seqAA;
-
-	fpAA = gzopen((P2In->InFq1).c_str(), "r");
-	seqAA = kseq_init(fpAA);
-
-	int AA ; int A=0;
-	string ID_1;
-	string seqStrAA;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+"_SE_tmp.fa";
-
-	FilePath.push_back(outputFileAPE);
-
-	OUTIO OUTHanDle ;
-	OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-	int CountFQ=0;
-
-	for (A=0 ; A<(P2In->ReadNumber) && ( (AA = kseq_read(seqAA)) >= 0)  ; A++)
-	{
-
-		ID_1=(seqAA->name.s);
-		seqStrAA=(seqAA->seq.s);
-
-		AAASSS[CountFQ]=seqStrAA;
-		AAAIII[CountFQ]=ID_1;
-
-		CountFQ++;
-
-		if (CountFQ==BATCH_SIZE)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterFASE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-
-			threads.clear();
-			RmPCRSE(P2In,PASS,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS[j])
-				{						
-					AAAIII[j][0]='>';
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-				}
-			}
-			CountFQ=0;
+	if (!P2In->OutFa) {
+		if ((P2In->MinCount)==1){
+			outname_se=OUT+".fq";
+		}else{
+			outname_se=OUT+"_tmp.fq";
 		}
 	}
 
-	if (CountFQ!=0)
-	{
-		for (int i = 0; i < n_thread; i++)
-		{
-			Start[i]=i*BinWind;
-			End[i]=Start[i]+BinWind;
-			if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-			threads.push_back(std::thread(FilterFASE,P2In,PASS,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-		}
+	FilePath.push_back(outname_se);
 
-		for (auto& thread : threads)
-		{
-			thread.join();
-		}
-		threads.clear();
-		RmPCRSE(P2In,PASS,CountFQ,AAASSS);
+	ofstream OUTH_SE;
+	OUTH_SE.open(outname_se.c_str());
 
-		for (int j = 0; j < CountFQ; j++)
-		{
-			if (PASS[j])
-			{
-				AAAIII[j][0]='>';
-				OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-			}
+	int hq_number=0;
+	int seq_num=0;
+	int A=0;
+
+	for (A=0 ; A<(P2In->ReadNumber) && ((len_se = kseq_read(seq_se)) >= 0); A++){
+		SE_ID[seq_num]=seq_se->name.s;
+		SE_SEQ[seq_num]=seq_se->seq.s;
+		SE_QUAL[seq_num]=seq_se->qual.s;
+		
+		seq_num++;
+		if (seq_num==BATCH_SIZE) {
+			int out_number=Run_SE_low_qual_batch(P2In, seq_num, OUTH_SE, SE_ID, SE_SEQ, SE_QUAL);
+			hq_number+=out_number;
+			seq_num=0;
 		}
-		CountFQ=0;
 	}
 
-	OUTHanDle.OUTAPE.close();
+	if (seq_num!=0) {
+		int out_number=Run_SE_low_qual_batch(P2In, seq_num, OUTH_SE, SE_ID, SE_SEQ, SE_QUAL);
+		hq_number+=out_number;
+		seq_num=0;
+	}
 
-	if  (A==(P2In->ReadNumber) )
-	{
-		if  ((AA = kseq_read(seqAA)) >= 0) {  }
-		else
-		{
+	OUTH_SE.close();
+
+	if (A==(P2In->ReadNumber)){
+		if (!((len_se = kseq_read(seq_se)) >= 0)) {
 			cout<<"INFO: ALL reads "<<A<<" are read done"<<endl;
 		}
-	}
-	else
-	{
+	} else {
 		cout<<"INFO: ALL reads "<<A<<" are read done"<<endl;
 	}
 
-	kseq_destroy(seqAA);
-	gzclose(fpAA);
+	if ((P2In->MinCount)==1){
+		cout<<"INFO: output SE read number is "<<hq_number<<endl;
+	}
 
-	delete [] Start ;
-	delete [] End;
-	delete [] PASS;
+	kseq_destroy(seq_se);
+	gzclose(fp_se);
+
+	vector<string>().swap(SE_ID);
+	vector<string>().swap(SE_SEQ);
+	vector<string>().swap(SE_QUAL);
 
 	return 0;
 }
 
-void GetMinCount(Para_A24 * P2In,  const kc_c4x_t *h  )
-{
-
-	if(((P2In->MinCount)==0) || (P2In->KmerStatOut))
-	{
+void GetMinCount(Para_A24 * P2In, const kc_c4x_t *h){
+	if(((P2In->MinCount)==0) || (P2In->KmerStatOut)){
 		hist_aux_t a;
 		uint64_t cnt[256];
 		int i, j;
@@ -974,37 +861,31 @@ void GetMinCount(Para_A24 * P2In,  const kc_c4x_t *h  )
 		CALLOC(a.cnt, n_thread);
 		kt_for(n_thread, worker_hist, &a, 1<<h->p);
 		for (i = 0; i < 256; ++i) { cnt[i] = 0;}
-		for (j = 0; j < n_thread; ++j)
-		{
-			for (i = 0; i < 256; ++i)
-			{
+		for (j = 0; j < n_thread; ++j) {
+			for (i = 0; i < 256; ++i) {
 				cnt[i] += a.cnt[j].c[i];
 			}
 		}
 		free(a.cnt);
 
 		uint64_t  Sum=0;
-		for (i = 1; i < 256; ++i)
-		{
+		for (i = 1; i < 256; ++i) {
 			Sum+=cnt[i]*i;
 		}
 		uint64_t  Half=Sum/2;
 
-		if ((P2In->KmerStatOut))
-		{
-			string KmerFre=(P2In->OutFq1)+".KmerFre.gz";
-			ogzstream OUTStat (KmerFre.c_str());
-			for (i = 1; i < 256; ++i)
-			{
-				OUTStat<<i<<"\t"<<cnt[i]<<"\n";
+		if ((P2In->KmerStatOut)) {
+			string Kmer_out=(P2In->OutPrefix)+".KmerFre.txt";
+			ofstream OUTH_kmer;
+			OUTH_kmer.open(Kmer_out.c_str());
+			for (i = 1; i < 256; ++i) {
+				OUTH_kmer<<i<<"\t"<<cnt[i]<<"\n";
 			}
-			OUTStat.close();
+			OUTH_kmer.close();
 		}
-		else
-		{
+		else {
 			Sum=0;
-			for (i = 1; i < 256 &&  Sum<Half; ++i)
-			{
+			for (i = 1; i < 256 &&  Sum<Half; ++i) {
 				Sum+=cnt[i]*i;
 			}
 
@@ -1016,36 +897,29 @@ void GetMinCount(Para_A24 * P2In,  const kc_c4x_t *h  )
 	cout<<"INFO: min kmer count is set to :"<<(P2In->MinCount)<<endl;
 }
 
-int  FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  * PASS2,  int & Start,int &   End ,vector <string> & AAASSS,vector <string> & BBBSSS)
-{
-	bool  QPASS_AA;
-	bool  QPASS_BB;
-	int CountAA=0;
-	int CountBB=0;
-	//return ;
-	for (int ii=Start; ii<End; ii++)
-	{
+int Filter_PE_low_kmer_reads(Para_A24 * P2In, const kc_c4x_t *h, bool * PASS_PE1, bool * PASS_PE2, 
+			int & Start, int & End, vector <string> & PE1_SEQ, vector <string> & PE2_SEQ){
 
-		CountAA=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,AAASSS[ii]);
-		CountBB=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,BBBSSS[ii]);
+	int Count_PE1=0; // count of high freq kmer in one read
+	int Count_PE2=0;
+	
+	for (int ii=Start; ii<End; ii++) {
+		Count_PE1=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, PE1_SEQ[ii]);
+		Count_PE2=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, PE2_SEQ[ii]);
 
-		if (CountAA<(P2In->MinReadKmerCount))
-		{
-			PASS1[ii]=false;
+		if (Count_PE1<(P2In->MinReadKmerCount)) {
+			PASS_PE1[ii]=false;
 		}
-		else
-		{
-			PASS1[ii]= true;
+		else {
+			PASS_PE1[ii]= true;
 		}
 
-		if (CountBB<(P2In->MinReadKmerCount))
-		{
+		if (Count_PE2<(P2In->MinReadKmerCount)) {
 
-			PASS2[ii]=false;
+			PASS_PE2[ii]=false;
 		}
-		else
-		{
-			PASS2[ii]= true;
+		else {
+			PASS_PE2[ii]= true;
 		}
 
 	}
@@ -1053,1198 +927,381 @@ int  FilterLowHitPE(Para_A24 * P2In,  const kc_c4x_t *h , bool  * PASS1, bool  *
 	return 1;
 }
 
-void FilterLowHitSE(Para_A24 * P2In, const kc_c4x_t *h , bool  * PASS1,  int & Start,int &   End ,vector <string> & AAASSS)
-{
-	bool  QPASS_AA;
-	int CountAA=0;
+void Filter_SE_low_kmer_reads(Para_A24 * P2In, const kc_c4x_t *h, bool * PASS, int &Start, int &End, vector <string> &SEQ) {
+	int Count=0;
+	for (int ii=Start; ii<End; ii++){
+		Count=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, SEQ[ii]);
+		if (Count<(P2In->MinReadKmerCount)){
 
-	for (int ii=Start; ii<End; ii++)
-	{
-
-		CountAA=ReadHitNum( h , P2In->Kmer,P2In->Windows,P2In->MinCount,AAASSS[ii]);
-		if (CountAA<(P2In->MinReadKmerCount))
-		{
-
-			PASS1[ii]=false;
+			PASS[ii]=false;
 		}
-		else
-		{
-			PASS1[ii]= true;
+		else {
+			PASS[ii]= true;
 		}
 	}
 }
 
-int RunFQ2FQ_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc_c4x_t *h )
-{
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
-
-	vector <string>  AAASSS ;
-	vector <string>  AAAQQQ ;
-	vector <string>  AAAIII ;
-
-	vector <string>  BBBSSS ;
-	vector <string>  BBBQQQ ;
-	vector <string>  BBBIII ;
-
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAQQQ.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
-
-	BBBSSS.resize(BATCH_SIZE+2);
-	BBBQQQ.resize(BATCH_SIZE+2);
-	BBBIII.resize(BATCH_SIZE+2);
-
+vector<int> Run_PE_low_kmer_batch(Para_A24 * P2In, const kc_c4x_t *h, int &seq_num, 
+				ofstream &OUTH_PE1, ofstream &OUTH_PE2, ofstream &OUTH_SE1, ofstream &OUTH_SE2,
+				vector <string> &PE1_ID, vector <string> &PE1_SEQ, vector <string> &PE1_QUAL,
+				vector <string> &PE2_ID, vector <string> &PE2_SEQ, vector <string> &PE2_QUAL){
+	
 	std::vector<std::thread> threads;
-
 	int * Start =new int [n_thread];
 	int * End =new int [n_thread];
+	bool  *PASS_PE1 =new bool [BATCH_SIZE];
+	bool  *PASS_PE2 =new bool [BATCH_SIZE];
 
-	bool  *PASS1 =new bool [BATCH_SIZE];
-	bool  *PASS2 =new bool [BATCH_SIZE];
-
-	igzstream INA (FilePath[0].c_str(),ifstream::in); // ifstream  + gz
-	igzstream INB (FilePath[1].c_str(),ifstream::in); // ifstream  + gz
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-	INB.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-	string ID_1 ,seq_1,temp_1,Quly_1;
-	string ID_2 ,seq_2,temp_2,Quly_2;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+"_pe_1.fq";
-	string outputFileBPE=OUT+"_pe_2.fq";
-	string outputFileASE=OUT+"_se_1.fq";
-	string outputFileBSE=OUT+"_se_2.fq";
-
-	if (P2In->OUTGZ)
-	{
-		OUTIOGZ OUTHanDle ;
-		outputFileAPE=OUT+"_pe_1.fq.gz";
-		outputFileBPE=OUT+"_pe_2.fq.gz";
-		outputFileASE=OUT+"_se_1.fq.gz";
-		outputFileBSE=OUT+"_se_2.fq.gz";
-
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
-
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTASE.open(outputFileASE.c_str());
-		OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-		OUTHanDle.OUTBSE.open(outputFileBSE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTASE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-			getline(INB,temp_2);
-			getline(INB,Quly_2);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBQQQ[CountFQ]=Quly_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j]  & PASS2[j] )
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-						OUTHanDle.PE++;
-					}
-					else if (PASS1[j])
-					{
-						OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-					else if (PASS2[j])
-					{
-						OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-						OUTHanDle.SEBB++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-
-				if (PASS1[j]  & PASS2[j] )
-				{						
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-					OUTHanDle.PE++;
-				}
-				else if (PASS1[j])
-				{
-					OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-				else if (PASS2[j])
-				{
-					OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-					OUTHanDle.SEBB++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output PE1 read number is "<<OUTHanDle.PE+OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: output PE2 read number is "<<OUTHanDle.PE+OUTHanDle.SEBB<<"\n";
-		cout<<"INFO: paired PE1 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: paired PE2 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: un-paired PE1 read number is "<<OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: un-paired PE2 read number is "<<OUTHanDle.SEBB<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-		OUTHanDle.OUTASE.close();
-		OUTHanDle.OUTBPE.close();
-		OUTHanDle.OUTBSE.close();
+	for (int i = 0; i < n_thread; i++){
+		Start[i]=i*BinWind;
+		End[i]=Start[i]+BinWind;
+		if (End[i]>seq_num) {End[i]=seq_num;} if (Start[i]>=End[i]) {continue;}
+		threads.push_back(thread(Filter_PE_low_kmer_reads,P2In,h,PASS_PE1,PASS_PE2,
+								 ref(Start[i]),ref(End[i]),
+						         ref(PE1_SEQ),ref(PE2_SEQ)));
 	}
-	else
-	{
-		OUTIO OUTHanDle ;
 
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTASE.open(outputFileASE.c_str());
-		OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-		OUTHanDle.OUTBSE.open(outputFileBSE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTASE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-			getline(INB,temp_2);
-			getline(INB,Quly_2);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBQQQ[CountFQ]=Quly_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j]  & PASS2[j] )
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-						OUTHanDle.PE++;
-					}
-					else if (PASS1[j])
-					{
-						OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-					else if (PASS2[j])
-					{
-						OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-						OUTHanDle.SEBB++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j]  & PASS2[j] )
-				{						
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-					OUTHanDle.PE++;
-				}
-				else if (PASS1[j])
-				{
-					OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-				else if (PASS2[j])
-				{
-					OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n+\n"<<BBBQQQ[j]<<"\n";
-					OUTHanDle.SEBB++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output PE1 read number is "<<OUTHanDle.PE+OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: output PE2 read number is "<<OUTHanDle.PE+OUTHanDle.SEBB<<"\n";
-		cout<<"INFO: paired PE1 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: paired PE2 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: un-paired PE1 read number is "<<OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: un-paired PE2 read number is "<<OUTHanDle.SEBB<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-		OUTHanDle.OUTASE.close();
-		OUTHanDle.OUTBPE.close();
-		OUTHanDle.OUTBSE.close();
-
+	for (auto& thread : threads) {
+		thread.join();
 	}
+
+	threads.clear();
+	
+	vector<int> hfk_number=Out_PE_seq(P2In, seq_num, OUTH_PE1, OUTH_PE2, OUTH_SE1, OUTH_SE2, 
+			   PASS_PE1, PASS_PE2, PE1_ID, PE1_SEQ, PE1_QUAL, PE2_ID, PE2_SEQ, PE2_QUAL);
 
 	delete [] Start;
 	delete [] End;
-	delete [] PASS1;
-	delete [] PASS2;
+	delete [] PASS_PE1;
+	delete [] PASS_PE2;
+
+	return hfk_number;
+}
+
+int Run_SE_low_kmer_batch(Para_A24 * P2In, const kc_c4x_t *h, int &seq_num, ofstream &OUTH_SE, 
+				vector <string> &SE_ID, vector <string> &SE_SEQ, vector <string> &SE_QUAL){
+	
+	std::vector<std::thread> threads;
+	int * Start =new int [n_thread];
+	int * End =new int [n_thread];
+	bool  *PASS =new bool [BATCH_SIZE];
+
+	for (int i = 0; i < n_thread; i++){
+		Start[i]=i*BinWind;
+		End[i]=Start[i]+BinWind;
+		if (End[i]>seq_num) {End[i]=seq_num;} if (Start[i]>=End[i]) {continue;}
+		threads.push_back(thread(Filter_SE_low_kmer_reads,P2In,h,PASS,
+								 ref(Start[i]),ref(End[i]), ref(SE_SEQ)));
+	}
+
+	for (auto& thread : threads) {
+		thread.join();
+	}
+
+	threads.clear();
+
+	int hfk_number=Out_SE_seq(P2In, seq_num, OUTH_SE, PASS, SE_ID, SE_SEQ, SE_QUAL);
+
+	delete [] Start;
+	delete [] End;
+	delete [] PASS;
+
+	return hfk_number;
+}
+
+int Run_PE_low_kmer_filter(Para_A24 * P2In, vector<std::string> &FilePath, const kc_c4x_t *h){
+	std::ios::sync_with_stdio(false);
+	std::cin.tie(0);
+
+	vector <string>  PE1_ID;
+	vector <string>  PE1_SEQ;
+	vector <string>  PE1_QUAL;
+	
+	vector <string>  PE2_ID ;
+	vector <string>  PE2_SEQ ;
+	vector <string>  PE2_QUAL ;
+
+	PE1_ID.resize(BATCH_SIZE+2);
+	PE1_SEQ.resize(BATCH_SIZE+2);
+	PE1_QUAL.resize(BATCH_SIZE+2);
+	
+	PE2_ID.resize(BATCH_SIZE+2);
+	PE2_SEQ.resize(BATCH_SIZE+2);
+	PE2_QUAL.resize(BATCH_SIZE+2);
+	
+	int len_pe1;
+	int len_pe2;
+
+	gzFile fp_pe1;
+	kseq_t *seq_pe1;
+
+	gzFile fp_pe2;
+	kseq_t *seq_pe2;
+
+	fp_pe1 = gzopen(FilePath[0].c_str(), "r");
+	seq_pe1 = kseq_init(fp_pe1);
+
+	fp_pe2 = gzopen(FilePath[1].c_str(), "r");
+	seq_pe2 = kseq_init(fp_pe2);
+
+	string id_1, seq_1, plus_1, qual_1 ;
+	string id_2, seq_2, plus_2, qual_2 ;
+
+	string OUT=(P2In->OutPrefix);
+	string outname_pe1=OUT+"_pe_1.fa";
+	string outname_pe2=OUT+"_pe_2.fa";
+	string outname_se1=OUT+"_se_1.fa";
+	string outname_se2=OUT+"_se_2.fa";
+
+	if (!P2In->OutFa) {
+		outname_pe1=OUT+"_pe_1.fq";
+		outname_pe2=OUT+"_pe_2.fq";
+		outname_se1=OUT+"_se_1.fq";
+		outname_se2=OUT+"_se_2.fq";
+	}
+
+	int hfk_pe_number=0;
+	int hfk_se_number=0;
+	ofstream OUTH_PE1,OUTH_PE2,OUTH_SE1,OUTH_SE2;
+	OUTH_PE1.open(outname_pe1.c_str());
+	OUTH_PE2.open(outname_pe2.c_str());
+	OUTH_SE1.open(outname_se1.c_str());
+	OUTH_SE2.open(outname_se2.c_str());
+	int seq_num=0;
+	int A=0;
+	
+	for (A=0 ; A<(P2In->ReadNumber) && ((len_pe1 = kseq_read(seq_pe1)) >= 0) && 
+										((len_pe2 = kseq_read(seq_pe2)) >= 0); A++){
+		PE1_ID[seq_num]=seq_pe1->name.s;
+		PE1_SEQ[seq_num]=seq_pe1->seq.s;
+		PE1_QUAL[seq_num]=seq_pe1->qual.s;
+		
+		PE2_ID[seq_num]=seq_pe2->name.s;
+		PE2_SEQ[seq_num]=seq_pe2->seq.s;
+		PE2_QUAL[seq_num]=seq_pe2->qual.s;
+
+		seq_num++;
+		if (seq_num==BATCH_SIZE) {
+			vector<int> out_number=Run_PE_low_kmer_batch(P2In, h, seq_num, 
+									OUTH_PE1, OUTH_PE2, OUTH_SE1, OUTH_SE2, 
+									PE1_ID, PE1_SEQ, PE1_QUAL,
+									PE2_ID, PE2_SEQ, PE2_QUAL);
+			hfk_pe_number+=out_number[0];
+			hfk_se_number+=out_number[1];
+			seq_num=0;
+		}
+	}
+
+	//filter the remaining sequence and output
+	if (seq_num!=0) {
+		vector<int> out_number=Run_PE_low_kmer_batch(P2In, h, seq_num, 
+								OUTH_PE1, OUTH_PE2, OUTH_SE1, OUTH_SE2, 
+								PE1_ID, PE1_SEQ, PE1_QUAL,
+								PE2_ID, PE2_SEQ, PE2_QUAL);
+		hfk_pe_number+=out_number[0];
+		hfk_se_number+=out_number[1];
+		seq_num=0;
+	}
+
+	OUTH_PE1.close();
+	OUTH_PE2.close();
+	OUTH_SE1.close();
+	OUTH_SE2.close();
+
+	cout<<"INFO: output PE1 read number is "<<hfk_pe_number+hfk_se_number<<"\n";
+	cout<<"INFO: output PE2 read number is "<<hfk_pe_number+hfk_se_number<<"\n";
+	cout<<"INFO: paired PE1 read number is "<<hfk_pe_number<<"\n";
+	cout<<"INFO: paired PE2 read number is "<<hfk_pe_number<<"\n";
+	cout<<"INFO: un-paired PE1 read number is "<<hfk_se_number<<"\n";
+	cout<<"INFO: un-paired PE2 read number is "<<hfk_se_number<<"\n";
+
+	kseq_destroy(seq_pe1);
+	gzclose(fp_pe1);
+
+	kseq_destroy(seq_pe2);
+	gzclose(fp_pe2);
+
+
+	vector<string>().swap(PE1_ID);
+	vector<string>().swap(PE1_SEQ);
+	vector<string>().swap(PE1_QUAL);
+	vector<string>().swap(PE2_ID);
+	vector<string>().swap(PE2_SEQ);
+	vector<string>().swap(PE2_QUAL);
 
 	return 0;
 }
 
-int RunFQ2FQ_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc_c4x_t * h )
-{
-
+int Run_SE_low_kmer_filter( Para_A24 * P2In, vector<std::string> & FilePath, const kc_c4x_t * h){
+	
 	std::ios::sync_with_stdio(false);
 	std::cin.tie(0);
 
-	vector <string>  AAASSS ;
-	vector <string>  AAAQQQ ;
-	vector <string>  AAAIII ;
+	vector <string>  SE_ID ;
+	vector <string>  SE_SEQ ;
+	vector <string>  SE_QUAL ;
+	
+	SE_ID.resize(BATCH_SIZE+2);
+	SE_SEQ.resize(BATCH_SIZE+2);
+	SE_QUAL.resize(BATCH_SIZE+2);
 
-	if (BATCH_SIZE > (P2In->ReadNumber)) 
-	{ 
-		BinWind =((P2In->ReadNumber)/n_thread)+1;
-		if (BinWind<32){BinWind=32;}
-		BATCH_SIZE=BinWind*n_thread;
-	}
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAQQQ.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
+	int len_se;
+	gzFile fp_se;
+	kseq_t *seq_se;
 
-	std::vector<std::thread> threads;
+	fp_se = gzopen(FilePath[0].c_str(), "r");
+	seq_se = kseq_init(fp_se);
+	
+	string id, seq, plus, qual;
 
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
+	string OUT=(P2In->OutPrefix);
+	string outname_se=OUT+".fa";
 
-	bool  *PASS1 =new bool [BATCH_SIZE];
-
-	igzstream INA (FilePath[0].c_str(),ifstream::in); // ifstream  + gz
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-	string ID_1 ,seq_1,temp_1,Quly_1;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+".fq";
-
-	if (P2In->OUTGZ)
-	{
-		OUTIOGZ OUTHanDle ;
-		outputFileAPE=OUT+".fq.gz";
-
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());		
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.SEAA=0;
-
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-				threads.clear();
-				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j])
-					{
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-
-	}
-	else
-	{
-		OUTIO OUTHanDle ;
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());		
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.SEAA=0;
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-			getline(INA,temp_1);
-			getline(INA,Quly_1);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAQQQ[CountFQ]=Quly_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-				threads.clear();
-				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j])
-					{
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j])
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n+\n"<<AAAQQQ[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-
+	if (!P2In->OutFa) {
+		outname_se=OUT+".fq";
 	}
 
-	delete [] Start;
-	delete [] End;
-	delete [] PASS1;
+	int hfk_number=0;
+
+	ofstream OUTH_SE;
+	OUTH_SE.open(outname_se.c_str());
+
+	int seq_num=0;
+	int A=0;
+
+	for (A=0 ; A<(P2In->ReadNumber) && ((len_se = kseq_read(seq_se)) >= 0); A++){
+		SE_ID[seq_num]=seq_se->name.s;
+		SE_SEQ[seq_num]=seq_se->seq.s;
+		SE_QUAL[seq_num]=seq_se->qual.s;
+		
+		seq_num++;
+		if (seq_num==BATCH_SIZE) {
+			int out_number=Run_SE_low_kmer_batch(P2In, h, seq_num, OUTH_SE, SE_ID, SE_SEQ, SE_QUAL);
+			hfk_number+=out_number;
+			seq_num=0;
+		}
+	}
+
+	if (seq_num!=0) {
+		int out_number=Run_SE_low_kmer_batch(P2In, h, seq_num, OUTH_SE, SE_ID, SE_SEQ, SE_QUAL);
+		hfk_number+=out_number;
+		seq_num=0;
+	}
+
+	OUTH_SE.close();
+
+	cout<<"INFO: output SE read number is "<<hfk_number<<endl;
+
+	kseq_destroy(seq_se);
+	gzclose(fp_se);
+
+	vector<string>().swap(SE_ID);
+	vector<string>().swap(SE_SEQ);
+	vector<string>().swap(SE_QUAL);
 
 	return 0;
 }
 
-int RunFA2FA_PEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc_c4x_t *h )
-{
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
-
-	vector <string>  AAASSS ;
-	vector <string>  AAAIII ;
-
-	vector <string>  BBBSSS ;
-	vector <string>  BBBIII ;
-
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
-
-	BBBSSS.resize(BATCH_SIZE+2);
-	BBBIII.resize(BATCH_SIZE+2);
-
-	std::vector<std::thread> threads;
-
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
-	bool  *PASS1 =new bool [BATCH_SIZE+2];
-	bool  *PASS2 =new bool [BATCH_SIZE+2];
-
-	igzstream INA (FilePath[0].c_str(),ifstream::in); // ifstream  + gz
-	igzstream INB (FilePath[1].c_str(),ifstream::in); // ifstream  + gz
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-	INB.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-	string ID_1 ,seq_1;
-	string ID_2 ,seq_2;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+"_pe_1.fa";
-	string outputFileBPE=OUT+"_pe_2.fa";
-	string outputFileASE=OUT+"_se_1.fa";
-	string outputFileBSE=OUT+"_se_2.fa";
-
-	if (P2In->OUTGZ)
-	{
-		OUTIOGZ OUTHanDle ;
-		outputFileAPE=OUT+"_pe_1.fa.gz";
-		outputFileBPE=OUT+"_pe_2.fa.gz";
-		outputFileASE=OUT+"_se_1.fa.gz";
-		outputFileBSE=OUT+"_se_2.fa.gz";
-
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTASE.open(outputFileASE.c_str());
-		OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-		OUTHanDle.OUTBSE.open(outputFileBSE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTASE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j]  & PASS2[j] )
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-						OUTHanDle.PE++;
-					}
-					else if (PASS1[j])
-					{
-						OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-					else if (PASS2[j])
-					{
-						OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-						OUTHanDle.SEBB++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitPE,P2In ,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j]  & PASS2[j] )
-				{						
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-					OUTHanDle.PE++;
-				}
-				else if (PASS1[j])
-				{
-					OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-				else if (PASS2[j])
-				{
-					OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-					OUTHanDle.SEBB++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output PE1 read number is "<<OUTHanDle.PE+OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: output PE2 read number is "<<OUTHanDle.PE+OUTHanDle.SEBB<<"\n";
-		cout<<"INFO: paired PE1 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: paired PE2 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: un-paired PE1 read number is "<<OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: un-paired PE2 read number is "<<OUTHanDle.SEBB<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-		OUTHanDle.OUTASE.close();
-		OUTHanDle.OUTBPE.close();
-		OUTHanDle.OUTBSE.close();
+string GetFileExtension(const string& FilePath) {
+	size_t dotPos = FilePath.rfind('.');
+	if (dotPos == string::npos) {
+		return "";
+	} 
+	else {
+		return FilePath.substr(dotPos + 1);
 	}
-	else
-	{
-		OUTIO OUTHanDle ;
-
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTASE.open(outputFileASE.c_str());
-		OUTHanDle.OUTBPE.open(outputFileBPE.c_str());
-		OUTHanDle.OUTBSE.open(outputFileBSE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTASE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.OUTBSE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-		OUTHanDle.PE=0;OUTHanDle.SEAA=0;OUTHanDle.SEBB=0;
-		int CountFQ=0;
-		//		cerr<<"Start\t"<<CountFQ<<"\t"<<BATCH_SIZE<<"\t"<<n_thread<<endl;
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-
-			getline(INB,ID_2);
-			getline(INB,seq_2);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAIII[CountFQ]=ID_1;
-
-			BBBSSS[CountFQ]=seq_2;
-			BBBIII[CountFQ]=ID_2;
-
-			CountFQ++;
-
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitPE,P2In,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j]  & PASS2[j] )
-					{						
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-						OUTHanDle.PE++;
-					}
-					else if (PASS1[j])
-					{
-						OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-					else if (PASS2[j])
-					{
-						OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-						OUTHanDle.SEBB++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		CountFQ--;
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitPE,P2In,std::ref(h),PASS1,PASS2,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS),std::ref(BBBSSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRPE(P2In,PASS1,PASS2,CountFQ,AAASSS,BBBSSS);
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j]  & PASS2[j] )
-				{						
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.OUTBPE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-					OUTHanDle.PE++;
-				}
-				else if (PASS1[j])
-				{
-					OUTHanDle.OUTASE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-				else if (PASS2[j])
-				{
-					OUTHanDle.OUTBSE<< BBBIII[j]<<"\n"<<BBBSSS[j]<<"\n";
-					OUTHanDle.SEBB++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output PE1 read number is "<<OUTHanDle.PE+OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: output PE2 read number is "<<OUTHanDle.PE+OUTHanDle.SEBB<<"\n";
-		cout<<"INFO: paired PE1 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: paired PE2 read number is "<<OUTHanDle.PE<<"\n";
-		cout<<"INFO: un-paired PE1 read number is "<<OUTHanDle.SEAA<<"\n";
-		cout<<"INFO: un-paired PE2 read number is "<<OUTHanDle.SEBB<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-		OUTHanDle.OUTASE.close();
-		OUTHanDle.OUTBPE.close();
-		OUTHanDle.OUTBSE.close();
-	}
-
-	delete [] Start;
-	delete [] End;
-	delete [] PASS1;
-	delete [] PASS2;
-
-	return 0;
 }
 
-int RunFA2FA_SEOUT ( Para_A24 * P2In,  vector<std::string>  & FilePath, const kc_c4x_t *h )
-{
+void Check_outprefix(Para_A24 * P2In) {
+	string path=P2In->OutPrefix;
+	string ext = GetFileExtension(path);
 
-	std::ios::sync_with_stdio(false);
-	std::cin.tie(0);
-
-	vector <string>  AAASSS ;
-	vector <string>  AAAIII ;
-
-	AAASSS.resize(BATCH_SIZE+2);
-	AAAIII.resize(BATCH_SIZE+2);
-
-	std::vector<std::thread> threads;
-
-	int * Start =new int [n_thread];
-	int * End =new int [n_thread];
-
-	bool  *PASS1 =new bool [BATCH_SIZE];
-
-	igzstream INA (FilePath[0].c_str(),ifstream::in); // ifstream  + gz
-	INA.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-	string ID_1 ,seq_1;
-	string ID_2 ,seq_2;
-
-	string OUT=(P2In->OutFq1);
-
-	string outputFileAPE=OUT+".fa";
-
-	if (P2In->OUTGZ)
-	{
-		OUTIOGZ OUTHanDle ;
-		outputFileAPE=OUT+".fa.gz";
-		OUTHanDle.SEAA=0;
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-
-			if (ID_1.empty()) {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-
-				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j])
-					{
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-			threads.clear();
-			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j])
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
-
-		OUTHanDle.OUTAPE.close();
-
+	if (ext == "gz") {
+		path = path.substr(0, path.rfind('.'));
+		P2In->OutPrefix=path;
+		ext = GetFileExtension(path);
 	}
-	else
-	{
-		OUTIO OUTHanDle ;
-
-		OUTHanDle.OUTAPE.open(outputFileAPE.c_str());
-		OUTHanDle.OUTAPE.rdbuf()->pubsetbuf(nullptr, BATCH_SIZE*1024);
-		OUTHanDle.SEAA=0;
-		int CountFQ=0;
-
-		while(!INA.eof())
-		{
-			getline(INA,ID_1);
-			getline(INA,seq_1);
-
-			if (ID_1.empty())   {continue ; }
-			AAASSS[CountFQ]=seq_1;
-			AAAIII[CountFQ]=ID_1;
-
-			CountFQ++;
-			if (CountFQ==BATCH_SIZE)
-			{
-				for (int i = 0; i < n_thread; i++)
-				{
-					Start[i]=i*BinWind;
-					End[i]=Start[i]+BinWind;
-					if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-					threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-				}
-
-				for (auto& thread : threads)
-				{
-					thread.join();
-				}
-
-				threads.clear();
-				RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-				for (int j = 0; j < CountFQ; j++)
-				{
-					if (PASS1[j])
-					{
-						OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-						OUTHanDle.SEAA++;
-					}
-				}
-				CountFQ=0;
-			}
-		}
-
-		if (CountFQ!=0)
-		{
-			for (int i = 0; i < n_thread; i++)
-			{
-				Start[i]=i*BinWind;
-				End[i]=Start[i]+BinWind;
-				if (End[i]>CountFQ)  {  End[i]=CountFQ;  } if (Start[i]>=End[i]) {continue;}
-				threads.push_back(std::thread(FilterLowHitSE,P2In ,std::ref(h),PASS1,std::ref(Start[i]),std::ref(End[i]),std::ref(AAASSS)));
-			}
-
-			for (auto& thread : threads)
-			{
-				thread.join();
-			}
-
-			threads.clear();
-			RmPCRSE(P2In,PASS1,CountFQ,AAASSS);
-
-			for (int j = 0; j < CountFQ; j++)
-			{
-				if (PASS1[j])
-				{
-					OUTHanDle.OUTAPE<< AAAIII[j]<<"\n"<<AAASSS[j]<<"\n";
-					OUTHanDle.SEAA++;
-				}
-
-			}
-			CountFQ=0;
-		}
-
-		cout<<"INFO: output SE read number is "<<OUTHanDle.SEAA<<"\n";
-
-		OUTHanDle.OUTAPE.close();
+	if((ext == "fq") || (ext == "fastq") || (ext == "fa") || (ext == "fasta")){
+		path = path.substr(0, path.rfind('.'));
+		P2In->OutPrefix=path;
 	}
-
-	delete [] Start;
-	delete [] End;
-	delete [] PASS1;
-
-	return 0;
 }
 
 //////////////////main///////////////////
-int main (int argc, char *argv[ ])
-{
+int main (int argc, char *argv[]) {
 	Para_A24 * P2In = new Para_A24;
-	int InPESE=1;
-	InPESE=parse_cmd_FqSplit(argc, argv, P2In );
-	if(InPESE==0)
-	{
+	int InPESE=1; // 1 for PE; 2 for SE; 0 for Unknow
+	InPESE=parse_cmd_FqSplit(argc, argv, P2In);
+	if(InPESE==0) {
 		delete P2In ;
 		return 0 ;
 	}
 
-	string path=(P2In->OutFq1);
-	string ext =path.substr(path.rfind('.') ==string::npos ? path.length() : path.rfind('.') + 1);
-	if (ext == "gz")
-	{
-		(P2In->OutFq1)=path.substr(0,path.rfind('.') ==string::npos ? path.length() : path.rfind('.'));
+	Check_outprefix(P2In);
+
+	if  (InPESE==2) {
+		(P2In->InFq1)=P2In->InSeFq; // use for qtype 
 	}
 
-	path=(P2In->OutFq1);
-	ext =path.substr(path.rfind('.') ==string::npos ? path.length() : path.rfind('.') + 1);
-
-	if (ext == "fa"  ||   ext == "fq")
-	{
-		(P2In->OutFq1)=path.substr(0,path.rfind('.') ==string::npos ? path.length() : path.rfind('.'));
-	}
-
-	if  (InPESE==2)
-	{
-		(P2In->InFq1)=P2In->InSeFq;
-	}
-
-	P2In->LowQint=GetShiftQ((P2In->InFq1),P2In); // (Phred) 33 or 64
-	P2In->MinBaseQ=(P2In->MinBaseQ)+(P2In->LowQint);
-	P2In->AverQ=(P2In->AverQ)+(P2In->LowQint);
-
-	if ((P2In->HalfReadLength) < ((P2In->Kmer)+1))
-	{
-		P2In->HalfReadLength=(P2In->ReadLength)/2;
-		if ((P2In->HalfReadLength)<((P2In->Kmer)+1) )
-		{
-			(P2In->HalfReadLength)=(P2In->Kmer)+1;
-		}
-
-		if  (((P2In->MinBaseQ)<2) && ((P2In->AverQ)<2)  && ((P2In->N_Number)==0))
-		{
-			P2In->FILTER=false ;
-		}
-	}
+	P2In->MaxQV=Get_qType((P2In->InFq1),P2In); // 0 for fasta
 
 	int read_length=(P2In->ReadLength);
-	if (VECMAX==1024*1024){
+	cout<<"INFO: middle read length is "<<read_length<<" bp"<<endl;
+
+	if (VECMAX==1024*100){
 		if (read_length>=30000){
-			VECMAX=1024*10;
+			VECMAX=1024;
 		} else if (read_length>500 && read_length<30000){
-			VECMAX=1024*100;
+			VECMAX=1024*4;
 		} else {
-			VECMAX=1024*1000;
+			VECMAX=1024*100;
 		}
 	}
 	
 	BinWind = ceil(VECMAX/n_thread);
 	BATCH_SIZE = BinWind*n_thread;
 
-	for (int i=0; i<256; i++)
-	{
+	for (int i=0; i<256; i++) {
 		NArry[i]=false;
 		LowArry[i]=true;
 	}
 	NArry['N']=true ; NArry['n']=true ;
 
-	for (int i=0; i<(P2In->MinBaseQ); i++)
-	{
+	for (int i=0; i<(P2In->MinBaseQ); i++) {
 		LowArry[i]=false;
 	}
 
-	if ((P2In->MinCount)==1)
-	{
-		RunM1_Work(P2In, InPESE);
+	vector<std::string> FilePath;
+	if (InPESE==1){
+		P2In->ReadNumber=(P2In->ReadNumber)/2;
+		Run_PE_low_qual_filter(P2In,FilePath);
+	} else if(InPESE==2){
+		Run_SE_low_qual_filter(P2In,FilePath);
+	}
+
+	if ((P2In->MinCount)==1) {
 		delete P2In ;
 		return (0);
 	}
 
-	vector<std::string> FilePath;
-
-	if ((InPESE==1) && ((P2In->LowQint)!=0)){ // PE FQ
-		P2In->ReadNumber=(P2In->ReadNumber)/2;
-		Run_PE_fq_filter(P2In,FilePath);
-	}
-	else if ((InPESE==2) && ((P2In->LowQint)!=0)){  // SE FQ
-		Run_SE_fq_filter(P2In,FilePath);
-	}
-	else if ((InPESE==1) && ((P2In->LowQint)==0)){ // PE FA
-		P2In->ReadNumber=(P2In->ReadNumber)/2;
-		Run_PE_fa_filter(P2In,FilePath);
-	}
-	else if ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
-		Run_SE_fa_filter(P2In,FilePath);
-	}
-
+	//get kmer freq 
 	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
 	if (n_thread>10) {
 		hash_size=int(n_thread*hash_size/10);
 	}
 
 	kc_c4x_t *h;
-	int p=KC_BITS ;  // Minimum length of counting field
+	int p=KC_BITS;  // Minimum length of counting field
 
 	// create the hash
 	h = count_file(FilePath, P2In->Kmer, P2In->Windows, p, hash_size, n_thread);
 
 	GetMinCount(P2In,h);
-
-	if ((InPESE==1) && ((P2In->LowQint)!=0)){ // PE FQ
-		if (P2In->OutFa) {
-			RunFA2FA_PEOUT(P2In, FilePath, h);
-		}
-		else {
-			RunFQ2FQ_PEOUT(P2In, FilePath, h);
-		}
-	}
-	else if  ((InPESE==2) && ((P2In->LowQint)!=0)){ // SE FQ
-		if (P2In->OutFa) {
-			RunFA2FA_SEOUT(P2In, FilePath, h);
-		}
-		else {
-			RunFQ2FQ_SEOUT(P2In, FilePath, h);
-		}
-	}
-	else if ((InPESE==1) && ((P2In->LowQint)==0)){ // PE FA
-		RunFA2FA_PEOUT(P2In, FilePath, h);
-	}
-	else if  ((InPESE==2) && ((P2In->LowQint)==0)){ // SE FA
-		RunFA2FA_SEOUT(P2In, FilePath, h);
+	
+	if (InPESE==1){
+		Run_PE_low_kmer_filter(P2In, FilePath, h);
+	} else if(InPESE==2){
+		Run_SE_low_kmer_filter(P2In, FilePath, h);
 	}
 
 	for (auto& file : FilePath){
