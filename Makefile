@@ -3,18 +3,14 @@ LIB_DIR := $(shell pwd)/lib
 SRC_DIR := $(shell pwd)/src
 INCLUDE_DIR := $(shell pwd)/include
 
-OS := $(shell uname -s)
+ZLIB_LIBS := $(shell pkg-config --libs zlib)
 
 .PHONY: all clean
 
 all: $(BIN_DIR)/hfkreads
 
 $(BIN_DIR)/hfkreads: $(SRC_DIR)/HFKReads.cpp | $(BIN_DIR)
-ifeq ($(OS),Darwin)
-	g++ --std=c++11 -g -O3 $< -lz -pthread -I$(INCLUDE_DIR) -o $@
-else
-	g++ -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR) --std=c++11 -g -O3 $< -lz -pthread -I$(INCLUDE_DIR) -o $@
-endif
+	g++ -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR) --std=c++11 -g -O3 $< $(ZLIB_LIBS) -pthread -I$(INCLUDE_DIR) -o $@
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
