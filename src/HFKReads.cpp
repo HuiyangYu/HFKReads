@@ -14,10 +14,8 @@
 #include <string.h>
 #include <thread>
 #include <algorithm>
-#include <malloc.h>
 #include <atomic>
 #include <unordered_set>
-#include <map>
 #include <cmath>
 #include <cstdio>
 #include <vector>
