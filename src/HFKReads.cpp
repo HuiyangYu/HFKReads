@@ -54,7 +54,7 @@ int  print_usage_FqSplit() {
 		"   -d           drop the duplicated reads/pairs\n"
 		"   -f           output the kmer frequency file\n"
 		"   -A           keep base quality in output\n"
-		"   -c           compress the output File\n"
+		//"   -c           compress the output File\n"
 		"   -t           number of threads [1]\n"
 		"   -h           show help [v2.03]\n"
 		"\n";
