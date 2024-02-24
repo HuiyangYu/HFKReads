@@ -6,10 +6,6 @@ INCLUDE_DIR := $(shell pwd)/include
 OS := $(shell uname)
 
 ifeq ($(OS),Darwin)
-    HAS_ZLIB := $(shell brew list | grep -q zlib && echo 1)
-endif
-
-ifeq ($(HAS_ZLIB), 1)
     ZLIB_LIBS := -lz
 else
     ifeq ($(shell pkg-config --exists zlib && echo 1), 1)
