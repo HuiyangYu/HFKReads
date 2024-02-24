@@ -18,6 +18,7 @@
 #include <atomic>
 #include <unordered_set>
 #include <map>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 #include <zlib.h>
@@ -67,7 +68,6 @@ int n_thread=1;
 int VECMAX =1024*100;
 int BinWind = VECMAX;
 int BATCH_SIZE = BinWind;
-unordered_set<string> seen_seqs;
 
 class Para_A24 {
 	public:
@@ -444,12 +444,11 @@ void Filter_PE_low_qual_reads(Para_A24 * P2In, bool * PASS, int & Start, int & E
 	}
 }
 
-
 void RmPCR_PE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SEQ, vector <string> & PE2_SEQ)
 {
 	if (P2In->Dedup) {
 		string Cat;
-
+		unordered_set<string> seen_seqs;
 		for (int ii = 0; ii < End; ii++) {
 			if (PASS[ii]) {
 				Cat = PE1_SEQ[ii] + PE2_SEQ[ii];
@@ -466,6 +465,7 @@ void RmPCR_PE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & PE1_SEQ
 void RmPCR_SE(Para_A24 * P2In, bool * PASS, int & End, vector <string> & SEQ)
 {
     if(P2In->Dedup){
+		unordered_set<string> seen_seqs;
         for (int ii=0; ii<End; ii++) {
             if (PASS[ii]) {
                 if (seen_seqs.find(SEQ[ii]) != seen_seqs.end()) {
@@ -690,6 +690,7 @@ int Run_PE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 									PE1_ID, PE1_SEQ, PE1_QUAL,
 									PE2_ID, PE2_SEQ, PE2_QUAL);
 			hq_number+=out_number;
+			
 			seq_num=0;
 		}
 	}
