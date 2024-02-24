@@ -29,7 +29,7 @@ using namespace std;
 
 //KSEQ_INIT(gzFile, gzread)
 
-int  print_usage_FqSplit() {
+int  print_usage_HFKreads() {
 	cout <<""
 		"Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix\n"
 		" Input/Output options:\n"
@@ -44,8 +44,8 @@ int  print_usage_FqSplit() {
 		"   -r	<float> max unknown base (N) ratio [0.1]\n"
 		"   -k	<int>   kmer length [31]\n"
 		"   -w	<int>   window size [10]\n"
-		"   -m	<int>   min kmer count for high frequency kmer [3] \n"
-		"   -x	<int>   min count of read with high frequency kmer [5]\n"
+		"   -m	<int>   min count for high frequency kmer (HFK) [3] \n"
+		"   -x	<float>	min ratio of HFK in the read [0.9]\n"
 		"   -n	<int>   read number to use [1000000]\n"
 		"   -a	        use all the read\n"
 		" Other options:\n"
@@ -63,7 +63,7 @@ int  print_usage_FqSplit() {
 bool NArry[256]={false};
 bool LowArry[256]={true};
 int n_thread=1;
-int VECMAX =1024*100;
+int VECMAX =102400;
 int BinWind = VECMAX;
 int BATCH_SIZE = BinWind;
 
@@ -82,10 +82,10 @@ class Para_A24 {
 		bool FILTER_LQ;
 		bool OutFa;
 		int N_Number;
-		int MinReadKmerCount;
+		double MinReadKmerRatio;
 		bool KmerStatOut;
 		unsigned long ReadNumber;
-		double  N_Ration;
+		double  N_Ratio;
 
 		string InFq1;
 		string InFq2;
@@ -100,7 +100,8 @@ class Para_A24 {
 			Windows=10;
 			MinCount=3;
 			N_Number=2;
-			N_Ration=0.1;
+			N_Ratio=0.1;
+			MinReadKmerRatio=0.9;
 			ReadNumber=1000000;
 			ReadLength=0;
 			MinLen=0;
@@ -108,7 +109,6 @@ class Para_A24 {
 			OUTGZ=false;
 			OutFa=true;
 			FILTER_LQ=true;
-			MinReadKmerCount=5;
 			KmerStatOut=false;
 			InFq1="";
 			InFq2="";
@@ -133,8 +133,8 @@ string & replace_all(string & str, const string & pattern, const string & replac
 	return str;
 }
 
-int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
-	if (argc <=3) {print_usage_FqSplit();return 0;}
+int parse_cmd_HFKreads(int argc, char **argv, Para_A24 * P2In) {
+	if (argc <=3) {print_usage_HFKreads();return 0;}
 
 	int err_flag = 0;
 
@@ -191,7 +191,7 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 		else if (flag == "r") {
 			if(i + 1 == argc) { LogLackArg( flag ) ; return 0;}
 			i++;
-			P2In->N_Ration=atof(argv[i]);
+			P2In->N_Ratio=atof(argv[i]);
 		}
 
 		//Filter low freq reads
@@ -225,8 +225,8 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 		else if (flag == "x") {
 			if(i + 1 == argc) {LogLackArg(flag); return 0;}
 			i++;
-			P2In->MinReadKmerCount=atoi(argv[i]);
-			if( (P2In->MinReadKmerCount)<1 ) {P2In->MinReadKmerCount=1;}
+			P2In->MinReadKmerRatio=atof(argv[i]);
+			if( (P2In->MinReadKmerRatio)>1 ) {P2In->MinReadKmerRatio=1;}
 		}
 		else if (flag == "n") {
 			if(i + 1 == argc) { LogLackArg(flag) ; return 0;}
@@ -257,7 +257,7 @@ int parse_cmd_FqSplit(int argc, char **argv, Para_A24 * P2In) {
 			n_thread=atoi(argv[i]);
 		}
 		else if (flag  == "help" || flag  == "h") {
-			print_usage_FqSplit();return 0;
+			print_usage_HFKreads();return 0;
 		}
 		//
 		else if (flag  ==  "u") {
@@ -335,7 +335,7 @@ int Get_qType(string FilePath, Para_A24 * P2In){
 	sort(Lengths, Lengths + maxSeq);
 	int middleIndex = maxSeq / 2;
 	P2In->ReadLength = Lengths[middleIndex];
-	P2In->N_Number=int((P2In->ReadLength)*(P2In->N_Ration));
+	P2In->N_Number=int((P2In->ReadLength)*(P2In->N_Ratio));
 
 	if ((P2In->MinLen) < ((P2In->Kmer)+1)) {
 		P2In->MinLen=(P2In->ReadLength)/2;
@@ -824,7 +824,11 @@ int Run_SE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
 	return 0;
 }
-
+int GetMinReadKmerCount(Para_A24 * P2In, int read_length){
+	int ReadKmerCount=int((read_length-(P2In->Kmer))/(P2In->Windows))+1;
+	int MinReadKmerCount=int(ReadKmerCount * (P2In->MinReadKmerRatio));
+	return MinReadKmerCount;
+}
 void GetMinCount(Para_A24 * P2In, const kc_c4x_t *h){
 	if(((P2In->MinCount)==0) || (P2In->KmerStatOut)){
 		hist_aux_t a;
@@ -880,15 +884,18 @@ int Filter_PE_low_kmer_reads(Para_A24 * P2In, const kc_c4x_t *h, bool * PASS_PE1
 	for (int ii=Start; ii<End; ii++) {
 		Count_PE1=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, PE1_SEQ[ii]);
 		Count_PE2=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, PE2_SEQ[ii]);
-
-		if (Count_PE1<(P2In->MinReadKmerCount)) {
+		int pe1_length=PE1_SEQ[ii].length();
+		int pe2_length=PE2_SEQ[ii].length();
+		int pe1_min_count=GetMinReadKmerCount(P2In,pe1_length);
+		int pe2_min_count=GetMinReadKmerCount(P2In,pe2_length);
+		if (Count_PE1 < pe1_min_count) {
 			PASS_PE1[ii]=false;
 		}
 		else {
 			PASS_PE1[ii]= true;
 		}
 
-		if (Count_PE2<(P2In->MinReadKmerCount)) {
+		if (Count_PE2 < pe2_min_count) {
 
 			PASS_PE2[ii]=false;
 		}
@@ -905,7 +912,9 @@ void Filter_SE_low_kmer_reads(Para_A24 * P2In, const kc_c4x_t *h, bool * PASS, i
 	int Count=0;
 	for (int ii=Start; ii<End; ii++){
 		Count=ReadHitNum(h, P2In->Kmer, P2In->Windows, P2In->MinCount, SEQ[ii]);
-		if (Count<(P2In->MinReadKmerCount)){
+		int length=SEQ[ii].length();
+		int min_count=GetMinReadKmerCount(P2In, length);
+		if (Count < min_count){
 
 			PASS[ii]=false;
 		}
@@ -1205,7 +1214,7 @@ void Check_outprefix(Para_A24 * P2In) {
 int main (int argc, char *argv[]) {
 	Para_A24 * P2In = new Para_A24;
 	int InPESE=1; // 1 for PE; 2 for SE; 0 for Unknow
-	InPESE=parse_cmd_FqSplit(argc, argv, P2In);
+	InPESE=parse_cmd_HFKreads(argc, argv, P2In);
 	if(InPESE==0) {
 		delete P2In ;
 		return 0 ;
@@ -1222,14 +1231,10 @@ int main (int argc, char *argv[]) {
 	int read_length=(P2In->ReadLength);
 	cout<<"INFO: middle read length is "<<read_length<<" bp"<<endl;
 
-	if (VECMAX==1024*100){
-		if (read_length>=30000){
-			VECMAX=1024;
-		} else if (read_length>500 && read_length<30000){
-			VECMAX=1024*4;
-		} else {
-			VECMAX=1024*100;
-		}
+	if (InPESE==1){
+		VECMAX=(VECMAX*100)/(read_length*2);
+	} else if (InPESE==2){
+		VECMAX=(VECMAX*100)/read_length;
 	}
 	
 	BinWind = ceil(VECMAX/n_thread);
