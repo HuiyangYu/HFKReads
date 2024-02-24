@@ -3,10 +3,20 @@ LIB_DIR := $(shell pwd)/lib
 SRC_DIR := $(shell pwd)/src
 INCLUDE_DIR := $(shell pwd)/include
 
-ifeq ($(shell pkg-config --exists zlib && echo 1), 1)
-    ZLIB_LIBS := $(shell pkg-config --libs zlib)
+OS := $(shell uname)
+
+ifeq ($(OS),Darwin)
+    HAS_ZLIB := $(shell brew list | grep -q zlib && echo 1)
+endif
+
+ifeq ($(HAS_ZLIB), 1)
+    ZLIB_LIBS := -lz
 else
-    ZLIB_LIBS := -L$(LIB_DIR) -lz
+    ifeq ($(shell pkg-config --exists zlib && echo 1), 1)
+        ZLIB_LIBS := $(shell pkg-config --libs zlib)
+    else
+        ZLIB_LIBS := -L$(LIB_DIR) -lz
+    endif
 endif
 
 .PHONY: all clean
@@ -21,3 +31,4 @@ $(BIN_DIR):
 
 clean:
 	rm -rf $(BIN_DIR)
+
