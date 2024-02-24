@@ -218,7 +218,6 @@ typedef struct __kstring_t {
 			seq->seq.s = (char*)realloc(seq->seq.s, seq->seq.m); \
 		} \
 		seq->seq.s[seq->seq.l] = 0;	/* null terminated string */ \
-		/*if (c != '+') return seq->seq.l; /* FASTA */ \
 		if (c != '+'){ \
 			seq->qual.l = 1; \
 			seq->qual.s = (char*)malloc(2); \
