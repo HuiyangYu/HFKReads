@@ -9,7 +9,7 @@ tar zvxf HFKReads-2.02-Linux-x86_64.tar.gz
 cd HFKReads-2.02-Linux-x86_64
 ./hfkreads -h
 ```
-### (2) Building from source （Linux or Mac）
+### (2) Building from source code （Linux or Mac）
 ```
 git clone https://github.com/HuiyangYu/HFKReads.git
 cd HFKReads
@@ -17,6 +17,7 @@ make
 cd bin
 ./hfkreads -h
 ```
+If the pre-built binaries are not functional, you need to install from the source code.
 ## 2. Usage
 ```
 Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix
