@@ -40,7 +40,6 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix
    -d           drop the duplicated reads/pairs
    -f           output the kmer frequency file
    -A           keep base quality in output
-   -c           compress the output File
    -t           number of threads [1]
    -h           show help [v2.03]
 ```
