@@ -273,7 +273,8 @@ int parse_cmd_HFKreads(int argc, char **argv, Para_A24 * P2In) {
 	//check file type; 0 for unknow; 1 for PE; 2 for SE 
 	if ((P2In->InSeFq).empty()){
 		if ((P2In->InFq1).empty() || (P2In->InFq2).empty()){
-			cerr<< "Error: PE reads should input together"<<endl;
+			cerr<< "Error: can't find input data"<<endl;
+			//cerr<< "Error: PE reads should input together"<<endl;
 			return 0;
 		}else{
 			if (access((P2In->InFq1).c_str(), 0) != 0){
@@ -332,8 +333,8 @@ int Get_qType(string FilePath, Para_A24 * P2In){
 	kseq_destroy(seq);
   	gzclose(fp);
 
-	sort(Lengths, Lengths + seqNum);
-	int middleIndex = seqNum / 2;
+	sort(Lengths, Lengths + maxSeq);
+	int middleIndex = maxSeq / 2;
 	P2In->ReadLength = Lengths[middleIndex];
 	P2In->N_Number=int((P2In->ReadLength)*(P2In->N_Ratio));
 
@@ -481,14 +482,15 @@ int Out_SE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH, bool *PASS, vector
 	if (P2In->OutFa){
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS[j]) {						
-				OUTH << ">"<<ID[j]<<"\n"<<SEQ[j]<<"\n";
+				ID[j][0]='>';
+				OUTH << ID[j]<<"\n"<<SEQ[j]<<"\n";
 				out_number++;
 			}
 		}
 	} else {
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS[j]) {
-				OUTH<< "@"<<ID[j]<<"\n"<<SEQ[j]<<"\n+\n"<<QUAL[j]<<"\n";
+				OUTH<< ID[j]<<"\n"<<SEQ[j]<<"\n+\n"<<QUAL[j]<<"\n";
 				out_number++;
 			}
 		}
@@ -505,27 +507,31 @@ vector<int> Out_PE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH_PE1, ofstre
 	if (P2In->OutFa){
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS_PE1[j] && PASS_PE2[j]) {						
-				OUTH_PE1 << ">"<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
-				OUTH_PE2 << ">"<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+				PE1_ID[j][0]='>';
+				PE2_ID[j][0]='>';
+				OUTH_PE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				OUTH_PE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
 				pe_number++;
 			} else if(PASS_PE1[j]){
-				OUTH_SE1 << ">"<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				PE1_ID[j][0]='>';
+				OUTH_SE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
 				se_number++;
 			} else if(PASS_PE2[j]){
-				OUTH_SE2 << ">"<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+				PE2_ID[j][0]='>';
+				OUTH_SE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
 			}
 		}
 	} else {
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS_PE1[j] && PASS_PE2[j]) {
-				OUTH_PE1<< "@"<<PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
-				OUTH_PE2<< "@"<<PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+				OUTH_PE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				OUTH_PE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
 				pe_number++;
 			}else if(PASS_PE1[j]){
-				OUTH_SE1<< "@"<<PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				OUTH_SE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
 				se_number++;
 			}else if(PASS_PE2[j]){
-				OUTH_SE2<< "@"<<PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+				OUTH_SE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
 			}
 		}
 	}
@@ -721,6 +727,13 @@ int Run_PE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 	kseq_destroy(seq_pe2);
 	gzclose(fp_pe2);
 
+	vector<string>().swap(PE1_ID);
+	vector<string>().swap(PE1_SEQ);
+	vector<string>().swap(PE1_QUAL);
+	vector<string>().swap(PE2_ID);
+	vector<string>().swap(PE2_SEQ);
+	vector<string>().swap(PE2_QUAL);
+
 	return 0;
 }
 
@@ -806,10 +819,14 @@ int Run_SE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 	kseq_destroy(seq_se);
 	gzclose(fp_se);
 
+	vector<string>().swap(SE_ID);
+	vector<string>().swap(SE_SEQ);
+	vector<string>().swap(SE_QUAL);
+
 	return 0;
 }
 int GetMinReadKmerCount(Para_A24 * P2In, int read_length){
-	int ReadKmerCount=int((read_length-(P2In->Kmer))/(P2In->Windows))+1;
+	int ReadKmerCount=int((read_length-(P2In->Kmer)+1)/(P2In->Windows));
 	int MinReadKmerCount=int(ReadKmerCount * (P2In->MinReadKmerRatio));
 	return MinReadKmerCount;
 }
@@ -1088,6 +1105,14 @@ int Run_PE_low_kmer_filter(Para_A24 * P2In, vector<std::string> &FilePath, const
 	kseq_destroy(seq_pe2);
 	gzclose(fp_pe2);
 
+
+	vector<string>().swap(PE1_ID);
+	vector<string>().swap(PE1_SEQ);
+	vector<string>().swap(PE1_QUAL);
+	vector<string>().swap(PE2_ID);
+	vector<string>().swap(PE2_SEQ);
+	vector<string>().swap(PE2_QUAL);
+
 	return 0;
 }
 
@@ -1154,6 +1179,10 @@ int Run_SE_low_kmer_filter( Para_A24 * P2In, vector<std::string> & FilePath, con
 	kseq_destroy(seq_se);
 	gzclose(fp_se);
 
+	vector<string>().swap(SE_ID);
+	vector<string>().swap(SE_SEQ);
+	vector<string>().swap(SE_QUAL);
+
 	return 0;
 }
 
@@ -1202,13 +1231,11 @@ int main (int argc, char *argv[]) {
 
 	int read_length=(P2In->ReadLength);
 	cout<<"INFO: middle read length is "<<read_length<<" bp"<<endl;
-	
-	if (VECMAX == 102400){
-		if (InPESE==1){
-			VECMAX=(VECMAX*100)/(read_length*2);
-		} else if (InPESE==2){
-			VECMAX=(VECMAX*100)/read_length;
-		}
+
+	if (InPESE==1){
+		VECMAX=(VECMAX*100)/(read_length*2);
+	} else if (InPESE==2){
+		VECMAX=(VECMAX*100)/read_length;
 	}
 	
 	BinWind = ceil(VECMAX/n_thread);
@@ -1238,13 +1265,13 @@ int main (int argc, char *argv[]) {
 	}
 
 	//get kmer freq 
-	uint64_t hash_size = 10000000; // Initial size of hash.
+	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
 	if (n_thread>10) {
 		hash_size=int(n_thread*hash_size/10);
 	}
 
 	kc_c4x_t *h;
-	int p=10;  // Minimum length of counting field
+	int p=KC_BITS;  // Minimum length of counting field
 
 	// create the hash
 	h = count_file(FilePath, P2In->Kmer, P2In->Windows, p, hash_size, n_thread);
