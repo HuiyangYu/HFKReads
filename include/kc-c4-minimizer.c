@@ -91,7 +91,7 @@ static inline void c4x_insert_buf(buf_c4_t *buf, int p, uint64_t y) // insert a 
 static void count_seq_buf(buf_c4_t *buf, int k, int w, int p, int len, const char *seq) // insert k-mers in $seq to linear buffer $buf
 {
 	int i, l;
-	uint64_t min_hash = UINT64_MAX;
+	uint64_t min_val = UINT64_MAX;
 	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
 	for (i = l = 0, x[0] = x[1] = 0; i < len; ++i) {
 		int c = seq_nt4_table[(uint8_t)seq[i]];
@@ -101,13 +101,12 @@ static void count_seq_buf(buf_c4_t *buf, int k, int w, int p, int len, const cha
 			x[1] = x[1] >> 2 | (uint64_t)(3 - c) << shift;  // reverse strand
 			if (++l >= k) { // we find a k-mer
 				uint64_t y = x[0] < x[1]? x[0] : x[1];
-				uint64_t hash_val = hash64(y, mask);
-                if (hash_val < min_hash) {
-                    min_hash = hash_val;
+				if (y < min_val) {
+                    min_val = y;
                 }
-				if((l-k) % w == (w-1)){
-					c4x_insert_buf(buf, p, hash_val);
-					min_hash = UINT64_MAX;
+				if((l-k+1) % w == 0){
+					c4x_insert_buf(buf, p, hash64(min_val,mask));
+					min_val = UINT64_MAX;
 				}
 				//return ;
 			}
@@ -272,7 +271,7 @@ static int ReadHitNum(const kc_c4x_t *h, int &  k, int &  w, int & minCount, str
 	int Count=0;
 	const char *seq=Kmer.c_str();
 	int len=Kmer.length();
-	uint64_t min_hash = UINT64_MAX;
+	uint64_t min_val = UINT64_MAX;
 	uint64_t x[2], mask = (1ULL<<k*2) - 1, shift = (k - 1) * 2;
 		
 	for (i = l = 0, x[0] = x[1] = 0; i < len; ++i){
@@ -283,15 +282,14 @@ static int ReadHitNum(const kc_c4x_t *h, int &  k, int &  w, int & minCount, str
 			x[1] = x[1] >> 2 | (uint64_t)(3 - c) << shift;  // reverse strand
 			if (++l >= k){
 				uint64_t y = x[0] < x[1]? x[0] : x[1];
-				uint64_t hash_val = hash64(y, mask);
-                if (hash_val < min_hash) {
-                    min_hash = hash_val;
+                if (y < min_val) {
+                    min_val = y;
                 }
-				if((l-k) % w == (w-1)){
-					if (IntKmer2Value(h,min_hash) >= minCount){
+				if((l-k+1) % w == 0){
+					if (IntKmer2Value(h,hash64(min_val,mask)) >= minCount){
 						Count++;
 					}
-					min_hash = UINT64_MAX;
+					min_val = UINT64_MAX;
 				}
 			}
 		} 
