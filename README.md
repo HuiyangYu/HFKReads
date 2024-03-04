@@ -32,7 +32,7 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix
    -l	<int>   min length of read [half]
    -r	<float> max unknown base (N) ratio [0.1]
    -k	<int>   kmer length [31]
-   -w	<int>   window size [10]
+   -w	<int>   minimizer window size [10]
    -m	<int>   min count for high frequency kmer (HFK) [3] 
    -x	<float>	min ratio of HFK in the read [0.9]
    -n	<int>   read number to use [1000000]
