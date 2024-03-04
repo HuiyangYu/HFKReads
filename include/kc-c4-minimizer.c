@@ -104,7 +104,7 @@ static void count_seq_buf(buf_c4_t *buf, int k, int w, int p, int len, const cha
 				if (y < min_val) {
                     min_val = y;
                 }
-				if((l-k+1) % w == 0){
+				if((l-k) % w == (w-1)){
 					c4x_insert_buf(buf, p, hash64(min_val,mask));
 					min_val = UINT64_MAX;
 				}
@@ -285,7 +285,7 @@ static int ReadHitNum(const kc_c4x_t *h, int &  k, int &  w, int & minCount, str
                 if (y < min_val) {
                     min_val = y;
                 }
-				if((l-k+1) % w == 0){
+				if((l-k) % w == (w-1)){
 					if (IntKmer2Value(h,hash64(min_val,mask)) >= minCount){
 						Count++;
 					}
