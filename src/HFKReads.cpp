@@ -54,7 +54,7 @@ int  print_usage_HFKreads() {
 		"   -A           keep base quality in output\n"
 		//"   -c           compress the output File\n"
 		"   -t           number of threads [1]\n"
-		"   -h           show help [v2.03]\n"
+		"   -h           show help [v2.04]\n"
 		"\n";
 	return 1;
 }
