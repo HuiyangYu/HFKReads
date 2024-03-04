@@ -4,9 +4,9 @@
 ##  1. Install
 ### (1) Pre-built binaries for x86_64 Linux
 ```
-wget -c https://github.com/HuiyangYu/HFKReads/releases/download/v2.03/HFKReads-2.03-Linux-x86_64.tar.gz
-tar zvxf HFKReads-2.03-Linux-x86_64.tar.gz
-cd HFKReads-2.03-Linux-x86_64
+wget -c https://github.com/HuiyangYu/HFKReads/releases/download/v2.04/HFKReads-2.04-Linux-x86_64.tar.gz
+tar zvxf HFKReads-2.04-Linux-x86_64.tar.gz
+cd HFKReads-2.04-Linux-x86_64
 ./hfkreads -h
 ```
 If the pre-built binaries are not functional, you need to install from the source code.
@@ -42,7 +42,7 @@ Usage: hfkreads -1 PE1.fq.gz -2 PE2.fq.gz -o OutPrefix
    -f           output the kmer frequency file
    -A           keep base quality in output
    -t           number of threads [1]
-   -h           show help [v2.03]
+   -h           show help [v2.04]
 ```
 ## 3. Example
 ### 3.1 Extracting high-frequency k-mer reads from paired-end sequencing reads
