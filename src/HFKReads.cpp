@@ -21,7 +21,7 @@
 #include <vector>
 #include <zlib.h>
 #include "kseq.h"
-#include "kc-c4-window.c"
+#include "kc-c4-minimizer.c"
 
 typedef  long long LLongA;
 
