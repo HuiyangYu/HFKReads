@@ -43,7 +43,7 @@ int  print_usage_HFKreads() {
 		"   -l	<int>   min length of read [half]\n"
 		"   -r	<float> max unknown base (N) ratio [0.1]\n"
 		"   -k	<int>   kmer length [31]\n"
-		"   -w	<int>   window size [10]\n"
+		"   -w	<int>   minimizer window size [10]\n"
 		"   -m	<int>   min count for high frequency kmer (HFK) [3] \n"
 		"   -x	<float>	min ratio of HFK in the read [0.9]\n"
 		"   -n	<int>   read number to use [1000000]\n"
