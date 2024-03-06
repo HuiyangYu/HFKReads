@@ -19,7 +19,7 @@
 #include <cmath>
 #include <cstdio>
 #include <vector>
-#include <zlib.h>
+#include "zlib.h"
 #include "kseq.h"
 #include "kc-c4-minimizer.c"
 
@@ -43,7 +43,7 @@ int  print_usage_HFKreads() {
 		"   -l	<int>   min length of read [half]\n"
 		"   -r	<float> max unknown base (N) ratio [0.1]\n"
 		"   -k	<int>   kmer length [31]\n"
-		"   -w	<int>   minimizer window size [10]\n"
+		"   -w	<int>   window size [10]\n"
 		"   -m	<int>   min count for high frequency kmer (HFK) [3] \n"
 		"   -x	<float>	min ratio of HFK in the read [0.9]\n"
 		"   -n	<int>   read number to use [1000000]\n"
@@ -54,7 +54,7 @@ int  print_usage_HFKreads() {
 		"   -A           keep base quality in output\n"
 		//"   -c           compress the output File\n"
 		"   -t           number of threads [1]\n"
-		"   -h           show help [v2.04]\n"
+		"   -h           show help [v2.03]\n"
 		"\n";
 	return 1;
 }
@@ -482,15 +482,14 @@ int Out_SE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH, bool *PASS, vector
 	if (P2In->OutFa){
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS[j]) {						
-				ID[j][0]='>';
-				OUTH << ID[j]<<"\n"<<SEQ[j]<<"\n";
+				OUTH <<">"<< ID[j]<<"\n"<<SEQ[j]<<"\n";
 				out_number++;
 			}
 		}
 	} else {
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS[j]) {
-				OUTH<< ID[j]<<"\n"<<SEQ[j]<<"\n+\n"<<QUAL[j]<<"\n";
+				OUTH<< "@"<<ID[j]<<"\n"<<SEQ[j]<<"\n+\n"<<QUAL[j]<<"\n";
 				out_number++;
 			}
 		}
@@ -507,31 +506,27 @@ vector<int> Out_PE_seq(Para_A24 * P2In, int &seq_num, ofstream &OUTH_PE1, ofstre
 	if (P2In->OutFa){
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS_PE1[j] && PASS_PE2[j]) {						
-				PE1_ID[j][0]='>';
-				PE2_ID[j][0]='>';
-				OUTH_PE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
-				OUTH_PE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+				OUTH_PE1 <<">"<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				OUTH_PE2 <<">"<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
 				pe_number++;
 			} else if(PASS_PE1[j]){
-				PE1_ID[j][0]='>';
-				OUTH_SE1 << PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
+				OUTH_SE1 <<">"<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n";
 				se_number++;
 			} else if(PASS_PE2[j]){
-				PE2_ID[j][0]='>';
-				OUTH_SE2 << PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
+				OUTH_SE2 <<">"<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n";
 			}
 		}
 	} else {
 		for (int j = 0; j < seq_num; j++) {
 			if (PASS_PE1[j] && PASS_PE2[j]) {
-				OUTH_PE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
-				OUTH_PE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+				OUTH_PE1<<"@"<<PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				OUTH_PE2<<"@"<<PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
 				pe_number++;
 			}else if(PASS_PE1[j]){
-				OUTH_SE1<< PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
+				OUTH_SE1<< "@"<<PE1_ID[j]<<"\n"<<PE1_SEQ[j]<<"\n+\n"<<PE1_QUAL[j]<<"\n";
 				se_number++;
 			}else if(PASS_PE2[j]){
-				OUTH_SE2<< PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
+				OUTH_SE2<< "@"<<PE2_ID[j]<<"\n"<<PE2_SEQ[j]<<"\n+\n"<<PE2_QUAL[j]<<"\n";
 			}
 		}
 	}
@@ -825,9 +820,11 @@ int Run_SE_low_qual_filter (Para_A24 * P2In, vector<std::string> & FilePath) {
 
 	return 0;
 }
+
 int GetMinReadKmerCount(Para_A24 * P2In, int read_length){
 	int ReadKmerCount=int((read_length-(P2In->Kmer)+1)/(P2In->Windows));
 	int MinReadKmerCount=int(ReadKmerCount * (P2In->MinReadKmerRatio));
+
 	return MinReadKmerCount;
 }
 void GetMinCount(Para_A24 * P2In, const kc_c4x_t *h){
@@ -1265,13 +1262,13 @@ int main (int argc, char *argv[]) {
 	}
 
 	//get kmer freq 
-	uint64_t hash_size = 100000000; // Initial size of hash.  100M 
+	uint64_t hash_size = 10000000; // Initial size of hash.  100M 
 	if (n_thread>10) {
 		hash_size=int(n_thread*hash_size/10);
 	}
 
 	kc_c4x_t *h;
-	int p=KC_BITS;  // Minimum length of counting field
+	int p=10;  // Minimum length of counting field
 
 	// create the hash
 	h = count_file(FilePath, P2In->Kmer, P2In->Windows, p, hash_size, n_thread);
